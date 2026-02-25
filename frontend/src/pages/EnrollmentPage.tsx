@@ -137,6 +137,7 @@ type StudentCreateForm = {
 type ScheduleRow = {
   mwfTime: string
   mwfSubject: string
+  mwfSubjectTitle?: string
   mwfUnits: string
   tthTime: string
   tthSubject: string
@@ -230,7 +231,9 @@ const buildScheduleRowsFromProspectus = (
     const isSaturdayHeader = tthSlot === 'SATURDAY_HEADER'
     const entry = entries[index]
     const subject = entry ? subjectMap.get(entry.subject) : null
-    const mwfSubjectLabel = subject ? `${subject.code}${sectionLabel ? ` - ${sectionLabel}` : ''}` : ''
+    const mwfSubjectLabel = subject
+      ? `${subject.code} ${subject.title}${sectionLabel ? ` - ${sectionLabel}` : ''}`
+      : ''
     return {
       mwfTime: MWF_SLOTS[index] ?? '',
       mwfSubject: mwfSubjectLabel,
@@ -656,10 +659,12 @@ export function EnrollmentPage() {
                     {scheduleRows.map((row, index) => (
                       <tr key={index}>
                         <td>
-                          <input value={row.mwfTime} onChange={(e) => onScheduleRowChange(index, 'mwfTime', e.target.value)} />
+                          <input className="schedule-time-input" value={row.mwfTime} onChange={(e) => onScheduleRowChange(index, 'mwfTime', e.target.value)} />
                         </td>
                         <td>
-                          <input value={row.mwfSubject} onChange={(e) => onScheduleRowChange(index, 'mwfSubject', e.target.value)} />
+                          <span title={row.mwfSubjectTitle || ''}>
+                            <input value={row.mwfSubject} onChange={(e) => onScheduleRowChange(index, 'mwfSubject', e.target.value)} />
+                          </span>
                         </td>
                         <td>
                           <input value={row.mwfUnits} onChange={(e) => onScheduleRowChange(index, 'mwfUnits', e.target.value)} />
@@ -668,7 +673,7 @@ export function EnrollmentPage() {
                           {row.tthSaturdayHeader ? (
                             <span>TIME</span>
                           ) : (
-                            <input value={row.tthTime} onChange={(e) => onScheduleRowChange(index, 'tthTime', e.target.value)} />
+                            <input className="schedule-time-input" value={row.tthTime} onChange={(e) => onScheduleRowChange(index, 'tthTime', e.target.value)} />
                           )}
                         </td>
                         <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>

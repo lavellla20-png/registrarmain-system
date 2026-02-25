@@ -420,6 +420,13 @@ td {
   padding: 4px 6px;
 }
 
+/* Make time fields just wide enough for '07:00-12:00' */
+.schedule-sheet-table input.schedule-time-input {
+  width: 95px;
+  min-width: 80px;
+  max-width: 120px;
+}
+
 .schedule-sat-cell {
   text-align: center;
   font-weight: 700;
