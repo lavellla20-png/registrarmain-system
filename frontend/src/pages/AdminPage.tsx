@@ -36,6 +36,24 @@ type FolderKey = 'departments' | 'programs' | 'terms' | 'sections'
 
 const ADMIN_FOLDERS_STORAGE_KEY = 'ccb_admin_folders_open_state'
 
+const SaveIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    width="16"
+    height="16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+    <path d="M7 21v-8h10v8" />
+    <path d="M7 3v5h8" />
+  </svg>
+)
+
 const defaultOpenFolders: Record<FolderKey, boolean> = {
   departments: true,
   programs: false,
@@ -295,7 +313,9 @@ export function AdminPage() {
       <h2 className="section-title">Create Department</h2>
       <form className="form-grid" onSubmit={submitDepartment}>
         <input placeholder="Department Name" value={deptName} onChange={(e) => setDeptName(e.target.value)} required />
-        <button type="submit">{editingDepartmentId ? 'Update Department' : 'Save Department'}</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> {editingDepartmentId ? 'Update Department' : 'Save Department'}
+        </button>
         {editingDepartmentId && (
           <button type="button" onClick={resetDepartmentForm}>
             Cancel Edit
@@ -316,7 +336,9 @@ export function AdminPage() {
         </select>
         <input placeholder="Program Adviser" value={programAdviser} onChange={(e) => setProgramAdviser(e.target.value)} />
         <input placeholder="School Dean" value={programDean} onChange={(e) => setProgramDean(e.target.value)} />
-        <button type="submit">{editingProgramId ? 'Update Program' : 'Save Program'}</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> {editingProgramId ? 'Update Program' : 'Save Program'}
+        </button>
         {editingProgramId && (
           <button type="button" onClick={resetProgramForm}>
             Cancel Edit
@@ -341,7 +363,9 @@ export function AdminPage() {
         <label>
           <input type="checkbox" checked={termIsActive} onChange={(e) => setTermIsActive(e.target.checked)} /> Active Term
         </label>
-        <button type="submit">{editingTermId ? 'Update Term' : 'Save Term'}</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> {editingTermId ? 'Update Term' : 'Save Term'}
+        </button>
         {editingTermId && (
           <button type="button" onClick={resetTermForm}>
             Cancel Edit
@@ -371,7 +395,9 @@ export function AdminPage() {
           <option value="2">2nd Semester</option>
           <option value="3">Summer</option>
         </select>
-        <button type="submit">{editingSectionId ? 'Update Section' : 'Save Section'}</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> {editingSectionId ? 'Update Section' : 'Save Section'}
+        </button>
         {editingSectionId && (
           <button type="button" onClick={resetSectionForm}>
             Cancel Edit

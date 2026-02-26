@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
 
@@ -723,16 +723,72 @@ export function EnrollmentPage() {
 
       <h2 className="section-title">Search Existing Student</h2>
       <form className="form-grid" onSubmit={searchStudent}>
-        <input placeholder="Student ID" value={searchId} onChange={(e) => setSearchId(e.target.value)} required />
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span
+            style={{
+              position: 'absolute',
+              left: '10px',
+              cursor: searchId ? 'pointer' : 'default',
+              userSelect: 'none',
+            }}
+            onClick={() => searchId && setSearchId('')}
+          >
+            {searchId ? '✕' : '🔍'}
+          </span>
+          <input
+            placeholder="Student ID"
+            value={searchId}
+            onChange={(e) => setSearchId(e.target.value)}
+            required
+            style={{ paddingLeft: '30px', width: '100%' }}
+          />
+        </div>
         <button type="submit">Search</button>
       </form>
 
       {student && (
-        <>
+        <>  
           <h2 className="section-title">Student Profile</h2>
-          <p>
-            <strong>{student.student_id}</strong> - {student.last_name}, {student.first_name} (Year {student.year_level})
-          </p>
+          <div className="table-wrap">
+            <table>
+              <tbody>
+                <tr>
+                  <th>Student ID</th>
+                  <td>{student.student_id}</td>
+                  <th>Program</th>
+                  <td>{programs.find((p) => p.id === student.program)?.name || student.program}</td>
+                </tr>
+                <tr>
+                  <th>Name</th>
+                  <td>{`${student.last_name}, ${student.first_name} ${student.middle_name || ''} ${student.extension_name || ''}`}</td>
+                  <th>Year Level</th>
+                  <td>{student.year_level}</td>
+                </tr>
+                <tr>
+                  <th>Gender</th>
+                  <td>{student.gender}</td>
+                  <th>Section</th>
+                  <td>{sections.find((s) => s.id === student.section)?.name || '-'}</td>
+                </tr>
+                <tr>
+                  <th>Academic Year</th>
+                  <td>{student.academic_year}</td>
+                  <th>Semester</th>
+                  <td>{student.semester || '-'}</td>
+                </tr>
+                <tr>
+                  <th>Email</th>
+                  <td>{student.email_address || '-'}</td>
+                  <th>Contact No.</th>
+                  <td>{student.contact_number || '-'}</td>
+                </tr>
+                <tr>
+                  <th>Address</th>
+                  <td colSpan={3}>{student.home_address || '-'}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
           <h2 className="section-title">Create Student Load</h2>
           <form className="form-grid" onSubmit={saveLoad}>

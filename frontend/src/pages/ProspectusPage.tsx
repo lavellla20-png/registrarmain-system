@@ -34,6 +34,57 @@ type Section = {
   semester: number
 }
 
+const AddIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    width="16"
+    height="16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="12" y1="5" x2="12" y2="19" />
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+)
+
+const RemoveIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    width="16"
+    height="16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+)
+
+const SaveIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    width="16"
+    height="16"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+    <path d="M7 21v-8h10v8" />
+    <path d="M7 3v5h8" />
+  </svg>
+)
+
 const buildAcademicYearOptions = () => {
   const currentYear = new Date().getFullYear()
   return Array.from({ length: 21 }, (_, i) => {
@@ -54,7 +105,7 @@ export function ProspectusPage() {
   const [editingSubjectId, setEditingSubjectId] = useState<number | null>(null)
 
   const [entryProgram, setEntryProgram] = useState('')
-  const [entrySubject, setEntrySubject] = useState('')
+  const [entrySubjects, setEntrySubjects] = useState<string[]>([''])
   const [entryYearLevel, setEntryYearLevel] = useState('1')
   const [entrySemester, setEntrySemester] = useState('1')
   const [entryAcademicYear, setEntryAcademicYear] = useState('')
@@ -106,7 +157,7 @@ export function ProspectusPage() {
 
   const resetEntryForm = () => {
     setEntryProgram('')
-    setEntrySubject('')
+    setEntrySubjects([''])
     setEntryYearLevel('1')
     setEntrySemester('1')
     setEntryAcademicYear('')
@@ -131,19 +182,21 @@ export function ProspectusPage() {
   const submitEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     await withFeedback(async () => {
-      const payload = {
-        program: Number(entryProgram),
-        subject: Number(entrySubject),
-        year_level: Number(entryYearLevel),
-        semester: Number(entrySemester),
-        academic_year: entryAcademicYear,
-        section: entrySection ? Number(entrySection) : null,
-        prerequisite: entryPrerequisite ? Number(entryPrerequisite) : null,
-      }
-      if (editingEntryId) {
-        await api.put(`/prospectus/${editingEntryId}/`, payload)
-      } else {
-        await api.post('/prospectus/', payload)
+      for (const subjectId of entrySubjects) {
+        const payload = {
+          program: Number(entryProgram),
+          subject: Number(subjectId),
+          year_level: Number(entryYearLevel),
+          semester: Number(entrySemester),
+          academic_year: entryAcademicYear,
+          section: entrySection ? Number(entrySection) : null,
+          prerequisite: entryPrerequisite ? Number(entryPrerequisite) : null,
+        }
+        if (editingEntryId) {
+          await api.put(`/prospectus/${editingEntryId}/`, payload)
+        } else {
+          await api.post('/prospectus/', payload)
+        }
       }
       resetEntryForm()
     }, editingEntryId ? 'Prospectus mapping updated.' : 'Prospectus mapping created.')
@@ -172,7 +225,7 @@ export function ProspectusPage() {
 
   const startEditEntry = (entry: ProspectusEntry) => {
     setEntryProgram(String(entry.program))
-    setEntrySubject(String(entry.subject))
+    setEntrySubjects([String(entry.subject)])
     setEntryYearLevel(String(entry.year_level))
     setEntrySemester(String(entry.semester))
     setEntryAcademicYear(entry.academic_year || '')
@@ -219,7 +272,9 @@ export function ProspectusPage() {
         <input placeholder="Subject Code" value={subjectCode} onChange={(e) => setSubjectCode(e.target.value)} required />
         <input placeholder="Subject Title" value={subjectTitle} onChange={(e) => setSubjectTitle(e.target.value)} required />
         <input placeholder="Units" value={subjectUnits} onChange={(e) => setSubjectUnits(e.target.value)} required />
-        <button type="submit">{editingSubjectId ? 'Update Subject' : 'Save Subject'}</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> {editingSubjectId ? 'Update Subject' : 'Save Subject'}
+        </button>
         {editingSubjectId && (
           <button type="button" onClick={resetSubjectForm}>
             Cancel Edit
@@ -238,14 +293,42 @@ export function ProspectusPage() {
           ))}
         </select>
 
-        <select value={entrySubject} onChange={(e) => setEntrySubject(e.target.value)} required>
-          <option value="">Select Subject</option>
-          {subjects.map((subject) => (
-            <option key={subject.id} value={subject.id}>
-              {subject.code} - {subject.title}
-            </option>
-          ))}
-        </select>
+        {/* Multiple Subject Selectors */}
+        {entrySubjects.map((subject, idx) => (
+          <select
+            key={idx}
+            value={subject}
+            onChange={(e) => {
+              const newSubjects = [...entrySubjects]
+              newSubjects[idx] = e.target.value
+              setEntrySubjects(newSubjects)
+            }}
+            required
+          >
+            <option value="">Select Subject</option>
+            {subjects.map((subject) => (
+              <option key={subject.id} value={subject.id}>
+                {subject.code} - {subject.title}
+              </option>
+            ))}
+          </select>
+        ))}
+        <button
+          type="button"
+          onClick={() => setEntrySubjects([...entrySubjects, ''])}
+          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}
+        >
+          <AddIcon /> Add Another Subject
+        </button>
+        {entrySubjects.length > 1 && (
+          <button
+            type="button"
+            onClick={() => setEntrySubjects(entrySubjects.slice(0, -1))}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}
+          >
+            <RemoveIcon /> Remove Last Subject
+          </button>
+        )}
 
         <select value={entryYearLevel} onChange={(e) => setEntryYearLevel(e.target.value)}>
           <option value="1">Year 1</option>
@@ -287,7 +370,9 @@ export function ProspectusPage() {
           ))}
         </select>
 
-        <button type="submit">{editingEntryId ? 'Update Mapping' : 'Save Mapping'}</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> {editingEntryId ? 'Update Mapping' : 'Save Mapping'}
+        </button>
         {editingEntryId && (
           <button type="button" onClick={resetEntryForm}>
             Cancel Edit
