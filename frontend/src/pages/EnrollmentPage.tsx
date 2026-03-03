@@ -274,6 +274,34 @@ const formatUnitsForView = (value: string): string => {
   return Number.isInteger(numericValue) ? String(numericValue) : String(numericValue)
 }
 
+const resolvePrintedByUser = (): string => {
+  const storedUsername = localStorage.getItem('auth_username')
+  if (storedUsername && storedUsername.trim()) return storedUsername.trim()
+
+  const accessToken = localStorage.getItem('access_token')
+  if (!accessToken) return 'Unknown User'
+  const parts = accessToken.split('.')
+  if (parts.length < 2) return 'Unknown User'
+
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(window.atob(paddedBase64)) as Record<string, unknown>
+    const usernameCandidate =
+      payload.username ?? payload.user_name ?? payload.preferred_username ?? payload.email ?? payload.sub
+
+    if (typeof usernameCandidate === 'string' && usernameCandidate.trim()) {
+      const normalized = usernameCandidate.trim()
+      localStorage.setItem('auth_username', normalized)
+      return normalized
+    }
+  } catch {
+    // Ignore decode errors and fall back to unknown.
+  }
+
+  return 'Unknown User'
+}
+
 const calculateAgeFromDob = (dob: string): number | null => {
   if (!dob) return null
   const birthDate = new Date(dob)
@@ -1080,18 +1108,26 @@ export function EnrollmentPage() {
     () => (viewProgram ? departments.find((department) => department.id === viewProgram.department) : null),
     [viewProgram, departments],
   )
+  const printedByUser = resolvePrintedByUser()
 
   const renderLoadSlip = (copyLabel: string) => (
     <div className="load-slip">
-      <div className="load-slip-top">
-        <div className="load-slip-title">Enrollment Load Slip</div>
-        <div className="load-slip-campus">City College of Bayawan</div>
-        <div className="load-slip-office">Office of the College Registrar</div>
+      <div className="load-slip-header">
+        <div className="load-slip-top-logos" aria-hidden="true">
+          <img src="/Picture2.png" alt="" />
+          <img src="/Picture3.png" alt="" />
+          <img src="/ccb_registrar_logo.png" alt="" />
+        </div>
+        <div className="load-slip-campus">CITY COLLEGE OF BAYAWAN</div>
+        <div className="load-slip-office">OFFICE OF THE COLLEGE REGISTRAR</div>
       </div>
 
       <div className="load-slip-section-title">Student General Information</div>
       <div className="load-slip-grid">
-        <div><span>Student ID Number:</span> {viewStudent?.student_id || '-'}</div>
+        <div>
+          <span>Student ID Number:</span>{' '}
+          <span className="load-slip-student-id-value">{viewStudent?.student_id || '-'}</span>
+        </div>
         <div><span>Department:</span> {viewDepartment?.name || '-'}</div>
         <div><span>School Year:</span> {viewStudent?.academic_year || '-'}</div>
         <div><span>Name:</span> {viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-'}</div>
@@ -1157,9 +1193,22 @@ export function EnrollmentPage() {
           <div className="load-slip-prepared-title">{PREPARED_BY_TITLE}</div>
         </div>
       </div>
-      <div className="load-slip-copy-tag">{copyLabel}</div>
+      <div className="load-slip-copy-footer">
+        <div className="load-slip-copy-tag">{copyLabel}</div>
+        <div className="load-slip-copy-printed-by"><span>Printed by:</span> {printedByUser}</div>
+      </div>
     </div>
   )
+
+  const printLoadSlip = () => {
+    const styleId = 'load-slip-legal-print-style'
+    document.getElementById(styleId)?.remove()
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = '@media print { @page { size: 8.5in 13in; margin: 0.2in; } }'
+    document.head.appendChild(style)
+    window.print()
+  }
 
   return (
     <section className="card">
@@ -1506,9 +1555,14 @@ export function EnrollmentPage() {
           <div className="enroll-modal load-slip-modal" onClick={(e) => e.stopPropagation()}>
             <div className="enroll-modal-header">
               <h2>Enrollment Load Slip</h2>
-              <button type="button" onClick={() => setIsViewModalOpen(false)}>
-                Close
-              </button>
+              <div className="modal-header-actions">
+                <button type="button" onClick={printLoadSlip}>
+                  Print
+                </button>
+                <button type="button" onClick={() => setIsViewModalOpen(false)}>
+                  Close
+                </button>
+              </div>
             </div>
 
             {!viewStudent ? (

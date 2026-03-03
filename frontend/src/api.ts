@@ -1,6 +1,7 @@
 ﻿import axios from 'axios'
 
 const API_BASE_URL = `http://${window.location.hostname}:8000/api`;
+const AUTH_USERNAME_STORAGE_KEY = 'auth_username'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -32,6 +33,7 @@ async function refreshAccessToken(): Promise<string | null> {
       .catch(() => {
         localStorage.removeItem('access_token')
         localStorage.removeItem('refresh_token')
+        localStorage.removeItem(AUTH_USERNAME_STORAGE_KEY)
         return null
       })
       .finally(() => {
@@ -69,6 +71,7 @@ api.interceptors.response.use(
 
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
+      localStorage.removeItem(AUTH_USERNAME_STORAGE_KEY)
       if (window.location.pathname !== '/') {
         window.location.href = '/'
       } else {
@@ -83,12 +86,14 @@ export async function login(username: string, password: string): Promise<LoginRe
   const response = await authApi.post<LoginResponse>('/auth/login/', { username, password })
   localStorage.setItem('access_token', response.data.access)
   localStorage.setItem('refresh_token', response.data.refresh)
+  localStorage.setItem(AUTH_USERNAME_STORAGE_KEY, username)
   return response.data
 }
 
 export function logout() {
   localStorage.removeItem('access_token')
   localStorage.removeItem('refresh_token')
+  localStorage.removeItem(AUTH_USERNAME_STORAGE_KEY)
 }
 
 export function isAuthenticated(): boolean {

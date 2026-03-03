@@ -515,6 +515,34 @@ td {
   font-size: 24px;
 }
 
+.modal-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.print-settings {
+  display: inline-flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.print-settings label {
+  display: grid;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #1f2937;
+}
+
+.print-settings select {
+  min-width: 96px;
+  padding: 5px 6px;
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
 .enroll-sheet-form {
   padding: 12px;
 }
@@ -751,38 +779,71 @@ td {
 }
 
 .load-slip {
+  position: relative;
+  overflow: hidden;
   padding: 16px;
-  border-top: 2px solid #0b1f3a;
-  background:
-    linear-gradient(120deg, rgba(10, 67, 122, 0.04), rgba(162, 123, 34, 0.06));
+  border: 1px solid #0f172a;
+  background: #fff;
 }
 
-.load-slip-top {
-  text-align: center;
+.load-slip::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('/Picture2.png');
+  background-repeat: no-repeat;
+  background-position: center 56%;
+  background-size: 630px 630px;
+  opacity: 0.1;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.load-slip > * {
+  position: relative;
+  z-index: 1;
+}
+
+.load-slip-header {
   border: 1px solid #1e293b;
-  padding: 12px 10px;
+  text-align: center;
+  padding: 10px 12px;
   background: #f8fafc;
 }
 
+.load-slip-top-logos {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.load-slip-top-logos img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+}
+
 .load-slip-title {
-  font-size: 28px;
+  font-size: 48px;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.5px;
   color: #0b1f3a;
 }
 
 .load-slip-campus {
-  font-size: 20px;
-  font-weight: 700;
+  font-size: 40px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.7px;
+  letter-spacing: 8px;
   color: #1f2937;
 }
 
 .load-slip-office {
-  margin-top: 4px;
-  font-size: 14px;
+  margin-top: 6px;
+  font-size: 28px;
   font-weight: 700;
   text-transform: uppercase;
   color: #334155;
@@ -909,9 +970,255 @@ td {
   font-weight: 600;
 }
 
+.load-slip-copy-footer {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.load-slip-copy-footer .load-slip-copy-tag {
+  margin-top: 0;
+}
+
+.load-slip-copy-printed-by {
+  font-size: 12px;
+}
+
+.load-slip-copy-printed-by span {
+  font-weight: 700;
+}
+
 .load-slip-divider {
   margin: 14px 0;
   border-top: 3px dashed #111827;
+}
+
+@media print {
+  @page {
+    size: 8.5in 13in;
+    margin: 0.2in;
+  }
+
+  html,
+  body {
+    margin: 0 !important;
+    padding: 0 !important;
+    width: auto;
+    height: auto;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .enroll-modal-overlay,
+  .enroll-modal-overlay * {
+    visibility: visible;
+  }
+
+  .enroll-modal-overlay {
+    position: fixed !important;
+    inset: 0 !important;
+    display: block !important;
+    background: #fff;
+    padding: 0;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .enroll-modal.load-slip-modal {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  .enroll-modal-header {
+    display: none;
+  }
+
+  .load-slip {
+    margin: 0;
+    padding: 4px 6px 0;
+    border: 0;
+    background: #fff;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    font-size: 11px;
+    min-height: 0;
+    width: 100%;
+  }
+
+  .load-slip::before {
+    background-size: 430px 430px;
+    opacity: 0.1;
+  }
+
+  .load-slip-header {
+    padding: 6px 8px;
+  }
+
+  .load-slip-top-logos {
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+
+  .load-slip-top-logos img {
+    width: 28px;
+    height: 28px;
+  }
+
+  .load-slip-title {
+    font-size: 24px;
+    letter-spacing: 1px;
+  }
+
+  .load-slip-campus {
+    font-size: 19px;
+    letter-spacing: 3px;
+  }
+
+  .load-slip-office {
+    margin-top: 2px;
+    font-size: 12px;
+  }
+
+  .load-slip-section-title {
+    margin-top: 6px;
+    margin-bottom: 0;
+    padding: 3px 6px;
+    font-size: 12px;
+    line-height: 1.1;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+  }
+
+  .load-slip-header,
+  .load-slip-section-title,
+  .load-slip-grid,
+  .load-slip-table-wrap,
+  .load-slip-summary,
+  .load-slip-copy-tag {
+    border-color: #000;
+  }
+
+  .load-slip-grid > div,
+  .load-slip-table th,
+  .load-slip-table td,
+  .load-slip-summary > div,
+  .load-slip-copy-tag {
+    border-color: #000;
+    padding: 3px 4px;
+    min-height: 0;
+    font-size: 10px;
+  }
+
+  .load-slip-grid {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    border-top: 0;
+  }
+
+  .load-slip-grid > div {
+    font-size: 10.5px;
+    line-height: 1.15;
+    padding: 2px 5px;
+    min-height: 19px;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .load-slip-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  }
+
+  .load-slip-grid > div,
+  .load-slip-summary > div {
+    border-right: 1px solid #000 !important;
+  }
+
+  .load-slip-grid > div:nth-child(3n) {
+    border-right: 0 !important;
+  }
+
+  .load-slip-grid span {
+    font-weight: 700;
+    font-size: 10.5px;
+  }
+
+  .load-slip-table th {
+    background: #fff;
+  }
+
+  .load-slip-table tr,
+  .load-slip-table td,
+  .load-slip-table th {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .load-slip-footer {
+    margin-top: 6px;
+    gap: 8px;
+  }
+
+  .load-slip-copy-tag {
+    margin-top: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+
+  .load-slip-copy-footer {
+    margin-top: 4px;
+    gap: 8px;
+  }
+
+  .load-slip-copy-printed-by {
+    font-size: 10px;
+  }
+
+  .load-slip-divider {
+    margin: 6px 0;
+    border-top: 2px dashed #000;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .load-slip-student-id-value {
+    color: #15803d !important;
+    font-weight: 700;
+  }
+
+  .load-slip-modal.print-density-compact .load-slip {
+    font-size: 10px;
+  }
+
+  .load-slip-modal.print-density-compact .load-slip-top-logos img {
+    width: 18px;
+    height: 18px;
+  }
+
+  .load-slip-modal.print-density-compact .load-slip-campus {
+    font-size: 16px;
+    letter-spacing: 2px;
+  }
+
+  .load-slip-modal.print-density-compact .load-slip-office {
+    font-size: 10px;
+  }
+
+  .load-slip-modal.print-density-compact .load-slip-grid > div,
+  .load-slip-modal.print-density-compact .load-slip-table th,
+  .load-slip-modal.print-density-compact .load-slip-table td,
+  .load-slip-modal.print-density-compact .load-slip-summary > div {
+    font-size: 9px;
+    padding: 2px 3px;
+  }
 }
 
 .sidebar-overlay {
@@ -959,7 +1266,7 @@ td {
   }
 }
 
-@media (max-width: 1024px) {
+@media screen and (max-width: 1024px) {
   .layout,
   .layout.layout-collapsed {
     grid-template-columns: 1fr;
@@ -1005,6 +1312,11 @@ td {
 
   .auth-card h1 {
     font-size: 28px;
+  }
+
+  .print-settings {
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .load-slip-grid,
