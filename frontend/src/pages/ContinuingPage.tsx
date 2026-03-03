@@ -126,9 +126,21 @@ type SlipScheduleRow = {
   schedule: string
 }
 
+type ContinuingScheduleGridRow = {
+  mwfTime: string
+  mwfSubject: string
+  mwfUnits: string
+  tthTime: string
+  tthSubject: string
+  tthUnits: string
+  tthSaturdayHeader?: boolean
+}
+
 const DEFAULT_SCHOLARSHIP_LABEL = 'Non-Scholar'
 const PREPARED_BY_NAME = 'KRISTIN LILIA J. RUELO'
 const PREPARED_BY_TITLE = 'College Registrar'
+const CONTINUING_MWF_SLOTS = ['7:00-8:00', '8:01-9:00', '9:01-10:00', '10:01-11:00', '11:01-12:00', '1:01-2:00', '2:01-3:00', '3:01-4:00', '4:01-5:00', '5:30-6:30', '6:31-7:30', '', '']
+const CONTINUING_TTH_SLOTS = ['7:00-8:30', '8:31-10:00', '10:01-11:30', '1:00-2:30', '2:31-4:00', '4:01-5:30', '5:31-7:00', '7:01-8:30', 'SATURDAY_HEADER', '1:00-4:30', '', '', '']
 
 const formatDateValue = (value: string | null): string => {
   if (!value) return '-'
@@ -172,10 +184,13 @@ export function ContinuingPage() {
   const [terms, setTerms] = useState<AcademicTerm[]>([])
 
   const [selectedProgram, setSelectedProgram] = useState('')
-  const [selectedYearLevel, setSelectedYearLevel] = useState('1')
+  const [selectedYearLevel, setSelectedYearLevel] = useState('')
   const [selectedAcademicYear, setSelectedAcademicYear] = useState('')
   const [selectedSemester, setSelectedSemester] = useState('1')
   const [selectedSection, setSelectedSection] = useState('')
+  const [selectedAdviserStatus, setSelectedAdviserStatus] = useState('approved')
+  const [selectedDeanStatus, setSelectedDeanStatus] = useState('approved')
+  const [continuingFormDate, setContinuingFormDate] = useState(new Date().toISOString().split('T')[0])
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -247,6 +262,8 @@ export function ContinuingPage() {
       setSelectedAcademicYear(found.academic_year || '')
       setSelectedSemester(String(found.semester ?? 1))
       setSelectedSection(found.section ? String(found.section) : '')
+      setSelectedAdviserStatus(found.adviser_approval_status || 'approved')
+      setSelectedDeanStatus(found.dean_approval_status || 'approved')
 
       setSuccess('Student found.')
     } catch (err) {
@@ -260,20 +277,53 @@ export function ContinuingPage() {
   const resolvedAdviserName = selectedProgramData?.program_adviser || student?.adviser_name || ''
   const resolvedDeanName = selectedProgramData?.school_dean || student?.dean_name || ''
 
-  const filteredSections = selectedProgram
-    ? sections.filter(
-        (section) =>
-          String(section.program) === selectedProgram &&
-          String(section.year_level) === selectedYearLevel &&
-          String(section.semester) === selectedSemester,
-      )
-    : sections
+  const hasRequiredSectionFilters = Boolean(
+    selectedProgram && selectedYearLevel && selectedAcademicYear && selectedSemester,
+  )
+  const hasMatchingAcademicTerm = terms.some(
+    (term) => term.year_label === selectedAcademicYear && String(term.semester) === selectedSemester,
+  )
+  const filteredSections =
+    hasRequiredSectionFilters && hasMatchingAcademicTerm
+      ? sections.filter(
+          (section) =>
+            String(section.program) === selectedProgram &&
+            String(section.year_level) === selectedYearLevel &&
+            String(section.semester) === selectedSemester,
+        )
+      : []
+  const sectionPlaceholder = !hasRequiredSectionFilters
+    ? 'Select Program, Year Level, Academic Year, and Semester first'
+    : !hasMatchingAcademicTerm
+      ? 'No matching academic term for selected year/semester'
+      : filteredSections.length
+        ? 'Section'
+        : 'No sections available for selected criteria'
 
   const subjectMap = useMemo(() => {
     const map = new Map<number, Subject>()
     subjects.forEach((subject) => map.set(subject.id, subject))
     return map
   }, [subjects])
+
+  useEffect(() => {
+    setSelectedSection((currentSection) => {
+      if (!currentSection) return currentSection
+      const isStillValid =
+        hasRequiredSectionFilters &&
+        hasMatchingAcademicTerm &&
+        filteredSections.some((section) => String(section.id) === currentSection)
+      return isStillValid ? currentSection : ''
+    })
+  }, [
+    selectedProgram,
+    selectedYearLevel,
+    selectedAcademicYear,
+    selectedSemester,
+    hasRequiredSectionFilters,
+    hasMatchingAcademicTerm,
+    filteredSections,
+  ])
 
   const scheduleFromCurrentLoads = useMemo(() => {
     if (!student || !selectedAcademicYear || !selectedSemester) return [] as Array<{ code: string; title: string }>
@@ -321,6 +371,55 @@ export function ContinuingPage() {
 
   const buildScheduleText = () => scheduleRows.map((row) => `${row.code} - ${row.title}`).join('\n')
 
+  const continuingTotalUnits = useMemo(() => {
+    return scheduleRows.reduce((total, row) => {
+      const matched = subjects.find((subject) => subject.code === row.code)
+      const units = matched ? Number(matched.units) : 0
+      return total + (Number.isFinite(units) ? units : 0)
+    }, 0)
+  }, [scheduleRows, subjects])
+
+  const continuingScheduleGrid = useMemo(() => {
+    const rowCount = Math.max(CONTINUING_MWF_SLOTS.length, CONTINUING_TTH_SLOTS.length)
+    const grid: ContinuingScheduleGridRow[] = Array.from({ length: rowCount }, (_, index) => {
+      const tthSlot = CONTINUING_TTH_SLOTS[index] ?? ''
+      const saturdayHeader = tthSlot === 'SATURDAY_HEADER'
+      return {
+        mwfTime: CONTINUING_MWF_SLOTS[index] ?? '',
+        mwfSubject: '',
+        mwfUnits: '',
+        tthTime: saturdayHeader ? 'TIME' : tthSlot,
+        tthSubject: saturdayHeader ? 'SATURDAY' : '',
+        tthUnits: '',
+        tthSaturdayHeader: saturdayHeader,
+      }
+    })
+
+    const targetCells: Array<{ rowIndex: number; column: 'mwf' | 'tth' }> = []
+    grid.forEach((row, rowIndex) => {
+      targetCells.push({ rowIndex, column: 'mwf' })
+      if (!row.tthSaturdayHeader) targetCells.push({ rowIndex, column: 'tth' })
+    })
+
+    scheduleRows.forEach((row, index) => {
+      const cell = targetCells[index]
+      if (!cell) return
+      const matched = subjects.find((subject) => subject.code === row.code)
+      const sectionSuffix = selectedSectionData?.name ? ` - ${selectedSectionData.name}` : ''
+      const subjectLabel = `${row.code} ${row.title}${sectionSuffix}`.trim()
+      const unitsLabel = matched?.units ? String(matched.units) : ''
+      if (cell.column === 'mwf') {
+        grid[cell.rowIndex].mwfSubject = subjectLabel
+        grid[cell.rowIndex].mwfUnits = unitsLabel
+      } else {
+        grid[cell.rowIndex].tthSubject = subjectLabel
+        grid[cell.rowIndex].tthUnits = unitsLabel
+      }
+    })
+
+    return grid
+  }, [scheduleRows, selectedSectionData, subjects])
+
   const saveChanges = async () => {
     if (!student) return
     setError('')
@@ -335,7 +434,9 @@ export function ContinuingPage() {
         target_section: selectedSection ? Number(selectedSection) : null,
         subject_load_schedule: buildScheduleText(),
         adviser_name: resolvedAdviserName,
+        adviser_approval_status: selectedAdviserStatus,
         dean_name: resolvedDeanName,
+        dean_approval_status: selectedDeanStatus,
       })
       const refreshed = await api.get<StudentDetail>(`/students/${student.student_id}/`)
       setStudent(refreshed.data)
@@ -373,7 +474,9 @@ export function ContinuingPage() {
         target_section: selectedSection ? Number(selectedSection) : null,
         subject_load_schedule: buildScheduleText(),
         adviser_name: resolvedAdviserName,
+        adviser_approval_status: selectedAdviserStatus,
         dean_name: resolvedDeanName,
+        dean_approval_status: selectedDeanStatus,
         term_id: matchedTerm.id,
       })
 
@@ -436,6 +539,8 @@ export function ContinuingPage() {
     setIsModalOpen(true)
     setStudent(null)
     setSearchId('')
+    setSelectedAdviserStatus('approved')
+    setSelectedDeanStatus('approved')
     setSuccess('')
     setError('')
   }
@@ -732,7 +837,7 @@ export function ContinuingPage() {
       )}
 
       {isModalOpen && (
-        <div className="enroll-modal-overlay" onClick={closeModal}>
+        <div className="enroll-modal-overlay">
           <div className="enroll-modal" style={{ overflowY: 'auto', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
             <div className="enroll-modal-header">
               <h2>Continuing Student Form</h2>
@@ -741,26 +846,33 @@ export function ContinuingPage() {
               </button>
             </div>
 
-            <div className="enroll-sheet-form">
+            <div className="enroll-sheet-form continuing-sheet-form">
+              <div className="continuing-date-row">
+                <strong>DATE:</strong>
+                <input type="date" value={continuingFormDate} onChange={(e) => setContinuingFormDate(e.target.value)} />
+              </div>
+
+              <div className="continuing-form-title">
+                <h3>ENROLLMENT FORM</h3>
+                <p>(FOR CONTINUING STUDENTS)</p>
+              </div>
+
               <div className="sheet-section-title">Search Student</div>
-              <form onSubmit={searchStudent} style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '1rem' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
-                  <input
-                    list="student-list"
-                    placeholder="Search or Select Student ID"
-                    value={searchId}
-                    onChange={(e) => setSearchId(e.target.value)}
-                    required
-                    style={{ width: '100%' }}
-                  />
-                  <datalist id="student-list">
-                    {allStudents.map((s) => (
-                      <option key={s.id} value={s.student_id}>
-                        {s.last_name}, {s.first_name} {s.middle_name || ''}.
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
+              <form onSubmit={searchStudent} className="continuing-search-row">
+                <input
+                  list="student-list"
+                  placeholder="Search or Select Student ID"
+                  value={searchId}
+                  onChange={(e) => setSearchId(e.target.value)}
+                  required
+                />
+                <datalist id="student-list">
+                  {allStudents.map((s) => (
+                    <option key={s.id} value={s.student_id}>
+                      {s.last_name}, {s.first_name} {s.middle_name || ''}.
+                    </option>
+                  ))}
+                </datalist>
                 <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
                   <SearchIcon /> Load
                 </button>
@@ -768,112 +880,146 @@ export function ContinuingPage() {
 
               {student && (
                 <>
-                  <div className="sheet-section-title">Student Details</div>
-                  <div className="sheet-grid">
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>Name</span>
-                      <div className="readonly-field" style={{ flex: 1 }}>{`${student.last_name}, ${student.first_name} ${student.middle_name || ''}.`}</div>
-                    </div>
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>Student ID</span>
-                      <div className="readonly-field" style={{ flex: 1 }}>{student.student_id}</div>
-                    </div>
-                    <div className="field-inline-label" style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>Current Program</span>
-                      <div className="readonly-field" style={{ flex: 1 }}>{selectedProgramData ? selectedProgramData.name : '-'}</div>
-                    </div>
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>Current Year</span>
-                      <div className="readonly-field" style={{ flex: 1 }}>{student.year_level}</div>
-                    </div>
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span>Current Semester</span>
-                      <div className="readonly-field" style={{ flex: 1 }}>{student.semester || '-'}</div>
-                    </div>
+                  <div className="sheet-section-title">Student's Information</div>
+                  <div className="continuing-grid">
+                    <input placeholder="Last Name" value={student.last_name || ''} readOnly />
+                    <input placeholder="First Name" value={student.first_name || ''} readOnly />
+                    <input placeholder="Middle Name" value={student.middle_name || ''} readOnly />
+                    <input placeholder="Name Ext. (e.g. Jr.)" value={student.extension_name || ''} readOnly />
+
+                    <select value={selectedProgram} onChange={(e) => setSelectedProgram(e.target.value)}>
+                      <option value="">Course/Program</option>
+                      {programs.map((program) => (
+                        <option key={program.id} value={program.id}>
+                          {program.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input placeholder="ID Number" value={student.student_id} readOnly />
+
+                    <select value={selectedYearLevel} onChange={(e) => setSelectedYearLevel(e.target.value)}>
+                      <option value="">Year Level</option>
+                      <option value="1">Year 1</option>
+                      <option value="2">Year 2</option>
+                      <option value="3">Year 3</option>
+                      <option value="4">Year 4</option>
+                    </select>
+                    <select value={selectedAcademicYear} onChange={(e) => setSelectedAcademicYear(e.target.value)}>
+                      <option value="">Academic Year</option>
+                      {academicYearOptions.map((yearLabel) => (
+                        <option key={yearLabel} value={yearLabel}>
+                          {yearLabel}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)}>
+                      <option value="1">1st Semester</option>
+                      <option value="2">2nd Semester</option>
+                      <option value="3">Summer</option>
+                    </select>
+                    <select
+                      value={selectedSection}
+                      onChange={(e) => setSelectedSection(e.target.value)}
+                      disabled={!hasRequiredSectionFilters || !hasMatchingAcademicTerm || !filteredSections.length}
+                    >
+                      <option value="">{sectionPlaceholder}</option>
+                      {filteredSections.map((section) => (
+                        <option key={section.id} value={section.id}>
+                          {section.name} (Year {section.year_level}, Sem {section.semester})
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
-                  <div className="sheet-section-title">Schedule Basis Selection</div>
-                  <div className="sheet-grid" style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '250px' }}>
-                      <span style={{ minWidth: '120px' }}>Target Program</span>
-                      <select value={selectedProgram} onChange={(e) => setSelectedProgram(e.target.value)} style={{ flex: 1 }}>
-                        <option value="">Select Program</option>
-                        {programs.map((program) => (
-                          <option key={program.id} value={program.id}>
-                            {program.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' }}>
-                      <span style={{ minWidth: '120px' }}>Target Year Level</span>
-                      <select value={selectedYearLevel} onChange={(e) => setSelectedYearLevel(e.target.value)} style={{ flex: 1 }}>
-                        <option value="1">Year 1</option>
-                        <option value="2">Year 2</option>
-                        <option value="3">Year 3</option>
-                        <option value="4">Year 4</option>
-                      </select>
-                    </div>
-
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' }}>
-                      <span style={{ minWidth: '120px' }}>Target Academic Year</span>
-                      <select value={selectedAcademicYear} onChange={(e) => setSelectedAcademicYear(e.target.value)} style={{ flex: 1 }}>
-                        <option value="">Select Academic Year</option>
-                        {academicYearOptions.map((yearLabel) => (
-                          <option key={yearLabel} value={yearLabel}>
-                            {yearLabel}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' }}>
-                      <span style={{ minWidth: '120px' }}>Target Semester</span>
-                      <select value={selectedSemester} onChange={(e) => setSelectedSemester(e.target.value)} style={{ flex: 1 }}>
-                        <option value="1">1st Semester</option>
-                        <option value="2">2nd Semester</option>
-                        <option value="3">Summer</option>
-                      </select>
-                    </div>
-
-                    <div className="field-inline-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: '200px' }}>
-                      <span style={{ minWidth: '120px' }}>Target Section</span>
-                      <select value={selectedSection} onChange={(e) => setSelectedSection(e.target.value)} style={{ flex: 1 }}>
-                        <option value="">Select Section</option>
-                        {filteredSections.map((section) => (
-                          <option key={section.id} value={section.id}>
-                            {section.name} (Year {section.year_level}, Sem {section.semester})
-                          </option>
-                        ))}
-                      </select>
+                  <div className="continuing-notes">
+                    <p>
+                      I promise to comply with the requirements in/on or before the end of the next semester in compliance with the
+                      prescribed period under the Student Handbook. Incomplete marks will automatically result to a failing mark if not
+                      complied with within the prescribed period.
+                    </p>
+                    <div className="continuing-sign-row">
+                      <span>Signature over printed Name of Student</span>
+                      <span>Date</span>
+                      <span>Adviser</span>
                     </div>
                   </div>
 
                   <div className="sheet-section-title">Subject Load Schedule</div>
-                  <div className="table-wrap">
-                    <table>
+                  <div className="table-wrap schedule-sheet-wrap">
+                    <table className="schedule-sheet-table">
                       <thead>
                         <tr>
-                          <th>Subject Code</th>
-                          <th>Subject Title</th>
+                          <th>MWF TIME</th>
+                          <th>SUBJECT CODE &amp; SECTION</th>
+                          <th>Units</th>
+                          <th>TTH TIME</th>
+                          <th>SUBJECT CODE &amp; SECTION</th>
+                          <th>Units</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {scheduleRows.map((row, index) => (
-                          <tr key={`${row.code}-${index}`}>
-                            <td>{row.code}</td>
-                            <td>{row.title}</td>
+                        {continuingScheduleGrid.map((row, index) => (
+                          <tr key={`continuing-row-${index}`}>
+                            <td><input className="schedule-time-input" value={row.mwfTime} readOnly /></td>
+                            <td><input value={row.mwfSubject} readOnly /></td>
+                            <td><input value={row.mwfUnits} readOnly /></td>
+                            <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>
+                              {row.tthSaturdayHeader ? <span>TIME</span> : <input className="schedule-time-input" value={row.tthTime} readOnly />}
+                            </td>
+                            <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>
+                              {row.tthSaturdayHeader ? <span>SATURDAY</span> : <input value={row.tthSubject} readOnly />}
+                            </td>
+                            <td>{row.tthSaturdayHeader ? null : <input value={row.tthUnits} readOnly />}</td>
                           </tr>
                         ))}
-                        {!scheduleRows.length && (
-                          <tr>
-                            <td colSpan={2}>No schedule found.</td>
-                          </tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
+
+                  <div className="continuing-summary-row">
+                    <span><strong>Remarks:</strong></span>
+                    <span><strong>Total Units:</strong> {continuingTotalUnits}</span>
+                    <span><strong>Total Subject/s:</strong> {scheduleRows.length}</span>
+                  </div>
+
+                  <div className="sheet-section-title">Approval</div>
+                  <table className="continuing-approval-table">
+                    <thead>
+                      <tr>
+                        <th></th>
+                        <th>Name</th>
+                        <th>Signature</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td><strong>PROGRAM ADVISER</strong></td>
+                        <td>{resolvedAdviserName || '-'}</td>
+                        <td>
+                          <select value={selectedAdviserStatus} onChange={(e) => setSelectedAdviserStatus(e.target.value)}>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        </td>
+                        <td><input type="date" value={continuingFormDate} onChange={(e) => setContinuingFormDate(e.target.value)} /></td>
+                      </tr>
+                      <tr>
+                        <td><strong>SCHOOL DEAN</strong></td>
+                        <td>{resolvedDeanName || '-'}</td>
+                        <td>
+                          <select value={selectedDeanStatus} onChange={(e) => setSelectedDeanStatus(e.target.value)}>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        </td>
+                        <td><input type="date" value={continuingFormDate} onChange={(e) => setContinuingFormDate(e.target.value)} /></td>
+                      </tr>
+                    </tbody>
+                  </table>
                 </>
               )}
             </div>
@@ -888,6 +1034,9 @@ export function ContinuingPage() {
                 </button>
                 <button type="button" onClick={approveAndFinalizeSchedule}>
                   Approve & Finalize
+                </button>
+                <button type="button" onClick={closeModal}>
+                  Cancel
                 </button>
               </div>
             )}

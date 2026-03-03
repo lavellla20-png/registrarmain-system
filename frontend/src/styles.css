@@ -594,6 +594,19 @@ td {
   padding: 4px 6px;
 }
 
+.schedule-sheet-table input[draggable='true'] {
+  cursor: grab;
+}
+
+.schedule-sheet-table input[draggable='true']:active {
+  cursor: grabbing;
+}
+
+.schedule-sheet-table input.schedule-drag-over {
+  border-color: #1d4ed8;
+  background: #dbeafe;
+}
+
 /* Make time fields just wide enough for '07:00-12:00' */
 .schedule-sheet-table input.schedule-time-input {
   width: 95px;
@@ -605,6 +618,119 @@ td {
   text-align: center;
   font-weight: 700;
   letter-spacing: 0.4px;
+}
+
+.continuing-sheet-form {
+  gap: 10px;
+}
+
+.continuing-date-row {
+  display: grid;
+  grid-template-columns: auto 220px;
+  align-items: center;
+  gap: 10px;
+}
+
+.continuing-date-row input[type='date'] {
+  width: 100%;
+}
+
+.continuing-form-title {
+  border: 1px solid #334155;
+  text-align: center;
+  padding: 8px;
+}
+
+.continuing-form-title h3 {
+  margin: 0;
+  font-size: 32px;
+  font-family: 'Times New Roman', serif;
+  letter-spacing: 0.5px;
+}
+
+.continuing-form-title p {
+  margin: 0;
+  font-size: 18px;
+  font-style: italic;
+  font-family: 'Times New Roman', serif;
+}
+
+.continuing-search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.continuing-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.continuing-grid input,
+.continuing-grid select {
+  border: 1px solid #94a3b8;
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-size: 14px;
+}
+
+.continuing-notes {
+  border: 1px solid #334155;
+  padding: 8px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.continuing-notes p {
+  margin: 0 0 10px;
+}
+
+.continuing-sign-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  font-weight: 600;
+}
+
+.continuing-summary-row {
+  border: 1px solid #334155;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+}
+
+.continuing-approval-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.continuing-approval-table th,
+.continuing-approval-table td {
+  border: 1px solid #94a3b8;
+  padding: 6px 8px;
+  font-size: 13px;
+}
+
+.continuing-approval-table input {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  padding: 4px 6px;
+}
+
+.continuing-approval-table select {
+  width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  padding: 4px 6px;
+}
+
+.continuing-approval-table thead th {
+  background: #e5e7eb;
+  text-transform: uppercase;
 }
 
 .enroll-modal-footer {

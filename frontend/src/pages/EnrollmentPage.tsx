@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
+import { DragEvent, FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
 import { AddUserIcon, SearchIcon } from '../components/Icons'
@@ -177,8 +177,14 @@ type ScheduleRow = {
   tthSaturdayHeader?: boolean
 }
 
+type ScheduleColumn = 'mwf' | 'tth'
+type ScheduleDragCell = {
+  rowIndex: number
+  column: ScheduleColumn
+}
+
 const MWF_SLOTS = ['7:00-8:00', '8:01-9:00', '9:01-10:00', '10:01-11:00', '11:01-12:00', '1:01-2:00', '2:01-3:00', '3:01-4:00', '4:01-5:00', '5:30-6:30']
-const TTH_SLOTS = ['7:00-8:30', '8:31-10:00', '10:01-11:30', '1:00-2:30', '2:31-4:00', '4:01-5:30', '5:31-7:00', '7:01-8:30', 'SATURDAY_HEADER', '', '', '']
+const TTH_SLOTS = ['7:00-8:30', '8:31-10:00', '10:01-11:30', '1:00-2:30', '2:31-4:00', '4:01-5:30', '5:31-7:00', '7:01-8:30', 'SATURDAY_HEADER', '1:00-4:30', '', '']
 
 const initialStudentForm: StudentCreateForm = {
   student_id: '',
@@ -211,9 +217,9 @@ const initialStudentForm: StudentCreateForm = {
   senior_high_track_strand: '',
   subject_load_schedule: '',
   adviser_name: '',
-  adviser_approval_status: 'pending',
+  adviser_approval_status: 'approved',
   dean_name: '',
-  dean_approval_status: 'pending',
+  dean_approval_status: 'approved',
 }
 
 const nullableNumber = (value: string): number | null => (value ? Number(value) : null)
@@ -235,6 +241,38 @@ const formatStatusForSlip = (status: string): string => {
 const DEFAULT_SCHOLARSHIP_LABEL = 'Non-Scholar'
 const PREPARED_BY_NAME = 'KRISTIN LILIA J. RUELO'
 const PREPARED_BY_TITLE = 'College Registrar'
+const PROPER_CASE_FIELDS: (keyof StudentCreateForm)[] = [
+  'last_name',
+  'first_name',
+  'middle_name',
+  'extension_name',
+  'nationality',
+  'home_address',
+  'mother_maiden_name',
+  'father_name',
+  'elementary_school',
+  'junior_high_school',
+  'senior_high_school',
+  'senior_high_track_strand',
+]
+
+const toProperCase = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (match) => match.toUpperCase())
+
+const hasSpecificSubject = (value: string): boolean => {
+  const normalized = value.trim()
+  if (!normalized) return false
+  if (normalized.toUpperCase() === 'SATURDAY') return false
+  return /[A-Za-z]/.test(normalized)
+}
+
+const formatUnitsForView = (value: string): string => {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return value
+  return Number.isInteger(numericValue) ? String(numericValue) : String(numericValue)
+}
 
 const calculateAgeFromDob = (dob: string): number | null => {
   if (!dob) return null
@@ -329,11 +367,30 @@ export function EnrollmentPage() {
   const [selectedSubject, setSelectedSubject] = useState('')
   const [selectedTerm, setSelectedTerm] = useState('')
   const [statusValue, setStatusValue] = useState('enrolled')
+  const [draggingCell, setDraggingCell] = useState<ScheduleDragCell | null>(null)
+  const [dropTarget, setDropTarget] = useState<ScheduleDragCell | null>(null)
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const computedAge = calculateAgeFromDob(studentForm.date_of_birth)
   const academicYearOptions = useMemo(buildAcademicYearOptions, [])
+  const [approvalDate, setApprovalDate] = useState(() => new Date().toISOString().split('T')[0])
+  const enrollmentScheduleSummary = useMemo(() => {
+    return scheduleRows.reduce(
+      (acc, row) => {
+        const append = (subject: string, units: string) => {
+          if (!hasSpecificSubject(subject)) return
+          acc.totalSubjects += 1
+          const parsedUnits = Number(units)
+          if (Number.isFinite(parsedUnits)) acc.totalUnits += parsedUnits
+        }
+        append(row.mwfSubject, row.mwfUnits)
+        append(row.tthSubject, row.tthUnits)
+        return acc
+      },
+      { totalSubjects: 0, totalUnits: 0 },
+    )
+  }, [scheduleRows])
 
   const loadEnrolledStudents = useCallback(async () => {
     try {
@@ -437,7 +494,8 @@ export function EnrollmentPage() {
   }
 
   const onStudentFieldChange = (field: keyof StudentCreateForm, value: string) => {
-    setStudentForm((prev) => ({ ...prev, [field]: value }))
+    const formattedValue = PROPER_CASE_FIELDS.includes(field) ? toProperCase(value) : value
+    setStudentForm((prev) => ({ ...prev, [field]: formattedValue }))
   }
 
   const onProgramChange = (programId: string) => {
@@ -453,6 +511,103 @@ export function EnrollmentPage() {
 
   const onScheduleRowChange = (index: number, key: keyof ScheduleRow, value: string) => {
     setScheduleRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, [key]: value } : row)))
+  }
+
+  const getScheduleCellKeys = (column: ScheduleColumn) =>
+    column === 'mwf'
+      ? ({ subjectKey: 'mwfSubject', unitsKey: 'mwfUnits' } as const)
+      : ({ subjectKey: 'tthSubject', unitsKey: 'tthUnits' } as const)
+
+  const isScheduleCellDraggable = (rowIndex: number, column: ScheduleColumn): boolean => {
+    const row = scheduleRows[rowIndex]
+    if (!row) return false
+    if (column === 'tth' && row.tthSaturdayHeader) return false
+    const { subjectKey } = getScheduleCellKeys(column)
+    return Boolean(row[subjectKey]?.trim())
+  }
+
+  const onScheduleDragStart = (event: DragEvent<HTMLInputElement>, rowIndex: number, column: ScheduleColumn) => {
+    if (!isScheduleCellDraggable(rowIndex, column)) {
+      event.preventDefault()
+      return
+    }
+    setDraggingCell({ rowIndex, column })
+    setDropTarget(null)
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const onScheduleDragOver = (event: DragEvent<HTMLInputElement>, rowIndex: number, column: ScheduleColumn) => {
+    const row = scheduleRows[rowIndex]
+    if (!draggingCell || !row) return
+    if (column === 'tth' && row.tthSaturdayHeader) return
+    event.preventDefault()
+    setDropTarget({ rowIndex, column })
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  const onScheduleDrop = (event: DragEvent<HTMLInputElement>, rowIndex: number, column: ScheduleColumn) => {
+    event.preventDefault()
+    const row = scheduleRows[rowIndex]
+    if (!draggingCell || !row) return
+    if (column === 'tth' && row.tthSaturdayHeader) return
+
+    const source = draggingCell
+    setScheduleRows((current) => {
+      const sourceRow = current[source.rowIndex]
+      const targetRow = current[rowIndex]
+      if (!sourceRow || !targetRow) return current
+      if (source.rowIndex === rowIndex && source.column === column) return current
+      if (column === 'tth' && targetRow.tthSaturdayHeader) return current
+      if (source.column === 'tth' && sourceRow.tthSaturdayHeader) return current
+
+      const sourceKeys = getScheduleCellKeys(source.column)
+      const targetKeys = getScheduleCellKeys(column)
+      const sourceSubject = sourceRow[sourceKeys.subjectKey]
+      const sourceUnits = sourceRow[sourceKeys.unitsKey]
+      const targetSubject = targetRow[targetKeys.subjectKey]
+      const targetUnits = targetRow[targetKeys.unitsKey]
+
+      // Same-row drag (MWF <-> TTH) must update both columns in one object;
+      // otherwise one side can be overwritten and appear to "disappear".
+      if (source.rowIndex === rowIndex) {
+        return current.map((rowItem, idx) => {
+          if (idx !== rowIndex) return rowItem
+          return {
+            ...rowItem,
+            [sourceKeys.subjectKey]: targetSubject,
+            [sourceKeys.unitsKey]: targetUnits,
+            [targetKeys.subjectKey]: sourceSubject,
+            [targetKeys.unitsKey]: sourceUnits,
+          }
+        })
+      }
+
+      return current.map((rowItem, idx) => {
+        if (idx === source.rowIndex) {
+          return {
+            ...rowItem,
+            [sourceKeys.subjectKey]: targetSubject,
+            [sourceKeys.unitsKey]: targetUnits,
+          }
+        }
+        if (idx === rowIndex) {
+          return {
+            ...rowItem,
+            [targetKeys.subjectKey]: sourceSubject,
+            [targetKeys.unitsKey]: sourceUnits,
+          }
+        }
+        return rowItem
+      })
+    })
+
+    setDraggingCell(null)
+    setDropTarget(null)
+  }
+
+  const onScheduleDragEnd = () => {
+    setDraggingCell(null)
+    setDropTarget(null)
   }
 
   const subjectMap = useMemo(() => {
@@ -499,6 +654,9 @@ export function EnrollmentPage() {
 
   const closeEnrollModal = () => {
     setIsEnrollModalOpen(false)
+    setDraggingCell(null)
+    setDropTarget(null)
+    setApprovalDate(new Date().toISOString().split('T')[0])
     setStudentForm(initialStudentForm)
     setScheduleRows(buildInitialScheduleRows())
   }
@@ -510,7 +668,8 @@ export function EnrollmentPage() {
 
     try {
       const scheduleText = scheduleRows
-        .map((row) => `MWF ${row.mwfTime}: ${row.mwfSubject} (${row.mwfUnits}) | TTH ${row.tthTime}: ${row.tthSubject} (${row.tthUnits})`)
+        .filter((row) => hasSpecificSubject(row.mwfSubject) || hasSpecificSubject(row.tthSubject))
+        .map((row) => `MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()}) | TTH ${row.tthTime}: ${row.tthSubject.trim()} (${row.tthUnits.trim()})`)
         .join('\n')
 
       await api.post('/students/', {
@@ -544,6 +703,10 @@ export function EnrollmentPage() {
         senior_high_school: studentForm.senior_high_school,
         senior_high_track_strand: studentForm.senior_high_track_strand,
         subject_load_schedule: scheduleText,
+        adviser_name: studentForm.adviser_name,
+        adviser_approval_status: studentForm.adviser_approval_status,
+        dean_name: studentForm.dean_name,
+        dean_approval_status: studentForm.dean_approval_status,
       })
 
       // Create AcademicHistory record for 1st Year - 1st Semester
@@ -593,10 +756,10 @@ export function EnrollmentPage() {
           
           // Academic Information for this Semester
           subject_load_schedule: scheduleText,
-          adviser_name: '',  // Will be set during approval
-          adviser_approval_status: 'pending',
-          dean_name: '',  // Will be set during approval
-          dean_approval_status: 'pending',
+          adviser_name: studentForm.adviser_name,
+          adviser_approval_status: studentForm.adviser_approval_status,
+          dean_name: studentForm.dean_name,
+          dean_approval_status: studentForm.dean_approval_status,
           
           // Status and Dates
           status: 'ongoing',
@@ -756,13 +919,157 @@ export function EnrollmentPage() {
     return viewStudent.loads.filter((load) => load.term_label === currentTermLabel && load.status === 'enrolled')
   }, [viewStudent])
 
+  const viewSlipRows = useMemo(() => {
+    if (!viewStudent?.subject_load_schedule) return [] as Array<{
+      code: string
+      courseTitle: string
+      section: string
+      units: string
+      schedule: string
+      room: string
+    }>
+
+    const rowMap = new Map<string, {
+      code: string
+      courseTitle: string
+      section: string
+      units: string
+      schedule: string[]
+      room: string
+    }>()
+    const sectionLabel = viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'
+    let inSaturdayBlock = false
+    const parseScheduleSide = (rawSide: string) => {
+      const unitsMatch = rawSide.match(/\(([^()]*)\)\s*$/)
+      const units = unitsMatch ? unitsMatch[1].trim() : '-'
+      const withoutUnits =
+        unitsMatch && unitsMatch.index !== undefined
+          ? rawSide.slice(0, unitsMatch.index).trim()
+          : rawSide.trim()
+      const separatorIndex = withoutUnits.indexOf(': ')
+      if (separatorIndex < 0) {
+        return { time: '-', subject: withoutUnits.trim(), units }
+      }
+      const time = withoutUnits.slice(0, separatorIndex).trim()
+      const subject = withoutUnits.slice(separatorIndex + 2).trim()
+      return { time, subject, units }
+    }
+
+    const toSubjectParts = (rawSubject: string) => {
+      const subjectText = rawSubject.trim()
+      if (!subjectText) {
+        return { code: '-', courseTitle: '-', keyText: '' }
+      }
+      const normalizedSubject = subjectText
+        .replace(/^\d{1,2}:\d{2}(?:-\d{1,2}:\d{2}(?:\s?(?:AM|PM))?)?:\s*/i, '')
+        .replace(/\s*-\s*[A-Za-z0-9]+$/, '')
+        .trim()
+
+      let matched = subjects
+        .filter((subject) => normalizedSubject.startsWith(`${subject.code} `) || normalizedSubject === subject.code)
+        .sort((a, b) => b.code.length - a.code.length)[0]
+
+      if (matched) {
+        return {
+          code: matched.code,
+          courseTitle: matched.title,
+          keyText: `${matched.code}|${matched.title}`,
+        }
+      }
+
+      const fallbackTokens = normalizedSubject.split(/\s+/)
+      const fallbackCode = fallbackTokens.slice(0, 2).join(' ') || '-'
+      const fallbackTitle = fallbackTokens.slice(2).join(' ') || normalizedSubject
+      return {
+        code: fallbackCode,
+        courseTitle: fallbackTitle,
+        keyText: `${fallbackCode}|${fallbackTitle}`,
+      }
+    }
+
+    const upsertScheduleRow = (dayLabel: 'MWF' | 'TTH' | 'SATURDAY', time: string, subjectRaw: string, unitsRaw: string) => {
+      const subjectText = subjectRaw.trim()
+      if (!hasSpecificSubject(subjectText)) return
+
+      const { code, courseTitle, keyText } = toSubjectParts(subjectText)
+      if (!keyText) return
+
+      const key = `${keyText}|${unitsRaw.trim()}`
+      const scheduleLabel = `${dayLabel} ${time.trim()}`
+      const existing = rowMap.get(key)
+      if (existing) {
+        if (!existing.schedule.includes(scheduleLabel)) {
+          existing.schedule.push(scheduleLabel)
+        }
+        return
+      }
+
+      rowMap.set(key, {
+        code,
+        courseTitle,
+        section: sectionLabel,
+        units: unitsRaw.trim() || '-',
+        schedule: [scheduleLabel],
+        room: '-',
+      })
+    }
+
+    viewStudent.subject_load_schedule
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .forEach((line) => {
+        const normalizedLine = line.replace(/\s+/g, ' ').trim()
+        const mwfPrefixMatch = normalizedLine.match(/^MWF\s+/i)
+        if (!mwfPrefixMatch) return
+        const splitMatch = normalizedLine.match(/\s\|\sTTH\s/i)
+        if (!splitMatch || splitMatch.index === undefined) {
+          const mwfOnlyRaw = normalizedLine.replace(/^MWF\s+/i, '')
+          const mwfOnly = parseScheduleSide(mwfOnlyRaw)
+          if (mwfOnly) {
+            upsertScheduleRow('MWF', mwfOnly.time, mwfOnly.subject, mwfOnly.units)
+          }
+          return
+        }
+
+        const splitIndex = splitMatch.index
+        const splitTokenLength = splitMatch[0].length
+        const mwfSideRaw = normalizedLine.slice(mwfPrefixMatch[0].length, splitIndex).trim()
+        const tthSideRaw = normalizedLine.slice(splitIndex + splitTokenLength).trim()
+        const mwfSide = parseScheduleSide(mwfSideRaw)
+        const tthSide = parseScheduleSide(tthSideRaw)
+        if (!mwfSide) return
+
+        upsertScheduleRow('MWF', mwfSide.time, mwfSide.subject, mwfSide.units)
+        if (!tthSide) return
+
+        const tthTime = tthSide.time.trim()
+        const tthSubject = tthSide.subject.trim()
+        if (tthTime.toUpperCase() === 'TIME' && tthSubject.toUpperCase() === 'SATURDAY') {
+          inSaturdayBlock = true
+          return
+        }
+
+        const tthDayLabel: 'TTH' | 'SATURDAY' = inSaturdayBlock ? 'SATURDAY' : 'TTH'
+        upsertScheduleRow(tthDayLabel, tthSide.time, tthSide.subject, tthSide.units)
+      })
+
+    return Array.from(rowMap.values()).map((row) => ({
+      code: row.code,
+      courseTitle: row.courseTitle,
+      section: row.section,
+      units: row.units,
+      schedule: row.schedule.join(', '),
+      room: row.room,
+    }))
+  }, [viewStudent, sections, subjects])
+
   const viewTotalUnits = useMemo(() => {
-    return viewCurrentSemesterLoads.reduce((total, load) => {
-      const matchedSubject = subjects.find((subject) => subject.id === load.subject_id || subject.code === load.subject_code)
-      const units = matchedSubject ? Number(matchedSubject.units) : 0
+    return viewSlipRows.reduce((total, row) => {
+      const units = Number(row.units)
       return total + (Number.isFinite(units) ? units : 0)
     }, 0)
-  }, [viewCurrentSemesterLoads, subjects])
+  }, [viewSlipRows])
 
   const viewProgram = useMemo(
     () => (viewStudent ? programs.find((program) => program.id === viewStudent.program) : null),
@@ -811,22 +1118,21 @@ export function EnrollmentPage() {
             </tr>
           </thead>
           <tbody>
-            {viewCurrentSemesterLoads.map((load) => {
-              const matchedSubject = subjects.find((subject) => subject.id === load.subject_id || subject.code === load.subject_code)
+            {viewSlipRows.map((row, index) => {
               return (
-                <tr key={`${copyLabel}-${load.id}`}>
-                  <td>{load.subject_code}</td>
-                  <td>{load.subject_title}</td>
-                  <td>{viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</td>
-                  <td>{matchedSubject?.units || '-'}</td>
-                  <td>-</td>
-                  <td>-</td>
+                <tr key={`${copyLabel}-${row.code}-${index}`}>
+                  <td>{row.code}</td>
+                  <td>{row.courseTitle}</td>
+                  <td>{row.section}</td>
+                  <td>{formatUnitsForView(row.units)}</td>
+                  <td>{row.schedule}</td>
+                  <td>{row.room}</td>
                 </tr>
               )
             })}
-            {!viewCurrentSemesterLoads.length && (
+            {!viewSlipRows.length && (
               <tr>
-                <td colSpan={6}>No current enrolled subjects found for this student.</td>
+                <td colSpan={6}>No subject load schedule found for this student.</td>
               </tr>
             )}
           </tbody>
@@ -834,7 +1140,7 @@ export function EnrollmentPage() {
       </div>
 
       <div className="load-slip-summary">
-        <div><span>Total Subjects:</span> {viewCurrentSemesterLoads.length}</div>
+        <div><span>Total Subjects:</span> {viewSlipRows.length}</div>
         <div><span>Total Units:</span> {viewTotalUnits}</div>
         <div><span>Date Enrolled:</span> {viewStudent?.admission_date || '-'}</div>
       </div>
@@ -870,7 +1176,7 @@ export function EnrollmentPage() {
       </div>
 
       {isEnrollModalOpen && (
-        <div className="enroll-modal-overlay" onClick={closeEnrollModal}>
+        <div className="enroll-modal-overlay">
           <div className="enroll-modal" style={{ overflowY: 'auto', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
             <div className="enroll-modal-header">
               <h2>Enrollment Form</h2>
@@ -992,14 +1298,26 @@ export function EnrollmentPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {scheduleRows.map((row, index) => (
+                    {scheduleRows.map((row, index) => {
+                      const mwfDropActive = dropTarget?.rowIndex === index && dropTarget.column === 'mwf'
+                      const tthDropActive = dropTarget?.rowIndex === index && dropTarget.column === 'tth'
+                      return (
                       <tr key={index}>
                         <td>
                           <input className="schedule-time-input" value={row.mwfTime} onChange={(e) => onScheduleRowChange(index, 'mwfTime', e.target.value)} />
                         </td>
                         <td>
                           <span title={row.mwfSubjectTitle || ''}>
-                            <input value={row.mwfSubject} onChange={(e) => onScheduleRowChange(index, 'mwfSubject', e.target.value)} />
+                            <input
+                              className={mwfDropActive ? 'schedule-drag-over' : ''}
+                              value={row.mwfSubject}
+                              onChange={(e) => onScheduleRowChange(index, 'mwfSubject', e.target.value)}
+                              draggable={isScheduleCellDraggable(index, 'mwf')}
+                              onDragStart={(e) => onScheduleDragStart(e, index, 'mwf')}
+                              onDragOver={(e) => onScheduleDragOver(e, index, 'mwf')}
+                              onDrop={(e) => onScheduleDrop(e, index, 'mwf')}
+                              onDragEnd={onScheduleDragEnd}
+                            />
                           </span>
                         </td>
                         <td>
@@ -1016,7 +1334,16 @@ export function EnrollmentPage() {
                           {row.tthSaturdayHeader ? (
                             <span>SATURDAY</span>
                           ) : (
-                            <input value={row.tthSubject} onChange={(e) => onScheduleRowChange(index, 'tthSubject', e.target.value)} />
+                            <input
+                              className={tthDropActive ? 'schedule-drag-over' : ''}
+                              value={row.tthSubject}
+                              onChange={(e) => onScheduleRowChange(index, 'tthSubject', e.target.value)}
+                              draggable={isScheduleCellDraggable(index, 'tth')}
+                              onDragStart={(e) => onScheduleDragStart(e, index, 'tth')}
+                              onDragOver={(e) => onScheduleDragOver(e, index, 'tth')}
+                              onDrop={(e) => onScheduleDrop(e, index, 'tth')}
+                              onDragEnd={onScheduleDragEnd}
+                            />
                           )}
                         </td>
                         <td>
@@ -1025,26 +1352,72 @@ export function EnrollmentPage() {
                           )}
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
 
-              <div className="sheet-section-title">Approval</div>
-              <div className="sheet-grid">
-                <input placeholder="Program Adviser Name" value={studentForm.adviser_name} onChange={(e) => onStudentFieldChange('adviser_name', e.target.value)} />
-                <select value={studentForm.adviser_approval_status} onChange={(e) => onStudentFieldChange('adviser_approval_status', e.target.value)}>
-                  <option value="pending">Adviser Pending</option>
-                  <option value="approved">Adviser Approved</option>
-                  <option value="rejected">Adviser Rejected</option>
-                </select>
-                <input placeholder="School Dean Name" value={studentForm.dean_name} onChange={(e) => onStudentFieldChange('dean_name', e.target.value)} />
-                <select value={studentForm.dean_approval_status} onChange={(e) => onStudentFieldChange('dean_approval_status', e.target.value)}>
-                  <option value="pending">Dean Pending</option>
-                  <option value="approved">Dean Approved</option>
-                  <option value="rejected">Dean Rejected</option>
-                </select>
+              <div className="continuing-summary-row">
+                <span><strong>Remarks:</strong></span>
+                <span><strong>Total Units:</strong> {enrollmentScheduleSummary.totalUnits}</span>
+                <span><strong>Total Subject/s:</strong> {enrollmentScheduleSummary.totalSubjects}</span>
               </div>
+
+              <div className="sheet-section-title">Approval</div>
+              <table className="continuing-approval-table">
+                <thead>
+                  <tr>
+                    <th></th>
+                    <th>Name</th>
+                    <th>Signature</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>PROGRAM ADVISER</strong></td>
+                    <td>
+                      <input
+                        placeholder="Program Adviser Name"
+                        value={studentForm.adviser_name}
+                        onChange={(e) => onStudentFieldChange('adviser_name', e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={studentForm.adviser_approval_status}
+                        onChange={(e) => onStudentFieldChange('adviser_approval_status', e.target.value)}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </td>
+                    <td><input type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} /></td>
+                  </tr>
+                  <tr>
+                    <td><strong>SCHOOL DEAN</strong></td>
+                    <td>
+                      <input
+                        placeholder="School Dean Name"
+                        value={studentForm.dean_name}
+                        onChange={(e) => onStudentFieldChange('dean_name', e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <select
+                        value={studentForm.dean_approval_status}
+                        onChange={(e) => onStudentFieldChange('dean_approval_status', e.target.value)}
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="approved">Approved</option>
+                        <option value="rejected">Rejected</option>
+                      </select>
+                    </td>
+                    <td><input type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} /></td>
+                  </tr>
+                </tbody>
+              </table>
 
               <div className="enroll-modal-footer">
                 <button type="submit">Save Enrollment</button>
@@ -1129,7 +1502,7 @@ export function EnrollmentPage() {
       </div>
 
       {isViewModalOpen && (
-        <div className="enroll-modal-overlay" onClick={() => setIsViewModalOpen(false)}>
+        <div className="enroll-modal-overlay">
           <div className="enroll-modal load-slip-modal" onClick={(e) => e.stopPropagation()}>
             <div className="enroll-modal-header">
               <h2>Enrollment Load Slip</h2>
