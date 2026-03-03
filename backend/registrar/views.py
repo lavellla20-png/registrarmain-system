@@ -223,7 +223,10 @@ class ContinuingViewSet(BaseRegistrarViewSet):
         target_semester = request.data.get('target_semester')
         target_program = request.data.get('target_program')
         target_section = request.data.get('target_section', None)
-        subject_load_schedule = request.data.get('subject_load_schedule', '')
+        # Frontend sends the dragged schedule with day/time format, e.g.:
+        # "MWF 7:00-8:00: ... | TTH 7:00-8:30: ..."
+        # Persist this verbatim (trimmed) to both Student and AcademicHistory.
+        subject_load_schedule = (request.data.get('subject_load_schedule', '') or '').strip()
         adviser_name = request.data.get('adviser_name', '')
         dean_name = request.data.get('dean_name', '')
         term_id = request.data.get('term_id')
@@ -351,7 +354,8 @@ class ContinuingViewSet(BaseRegistrarViewSet):
                         'junior_high_school': student.junior_high_school,
                         'senior_high_school': student.senior_high_school,
                         'senior_high_track_strand': student.senior_high_track_strand,
-                        'subject_load_schedule': student.subject_load_schedule,
+                        # Save dragged schedule day/time placement for this target semester.
+                        'subject_load_schedule': subject_load_schedule,
                         'adviser_name': student.adviser_name,
                         'adviser_approval_status': student.adviser_approval_status,
                         'dean_name': student.dean_name,

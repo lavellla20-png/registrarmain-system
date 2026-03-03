@@ -242,10 +242,6 @@ const DEFAULT_SCHOLARSHIP_LABEL = 'Non-Scholar'
 const PREPARED_BY_NAME = 'KRISTIN LILIA J. RUELO'
 const PREPARED_BY_TITLE = 'College Registrar'
 const PROPER_CASE_FIELDS: (keyof StudentCreateForm)[] = [
-  'last_name',
-  'first_name',
-  'middle_name',
-  'extension_name',
   'nationality',
   'home_address',
   'mother_maiden_name',
@@ -255,6 +251,7 @@ const PROPER_CASE_FIELDS: (keyof StudentCreateForm)[] = [
   'senior_high_school',
   'senior_high_track_strand',
 ]
+const UPPERCASE_FIELDS: (keyof StudentCreateForm)[] = ['last_name', 'first_name', 'middle_name', 'extension_name']
 
 const toProperCase = (value: string): string =>
   value
@@ -522,7 +519,11 @@ export function EnrollmentPage() {
   }
 
   const onStudentFieldChange = (field: keyof StudentCreateForm, value: string) => {
-    const formattedValue = PROPER_CASE_FIELDS.includes(field) ? toProperCase(value) : value
+    const formattedValue = UPPERCASE_FIELDS.includes(field)
+      ? value.toUpperCase()
+      : PROPER_CASE_FIELDS.includes(field)
+        ? toProperCase(value)
+        : value
     setStudentForm((prev) => ({ ...prev, [field]: formattedValue }))
   }
 
@@ -695,9 +696,33 @@ export function EnrollmentPage() {
     setSuccess('')
 
     try {
+      const saturdayHeaderIndex = scheduleRows.findIndex((row) => row.tthSaturdayHeader)
+      const hasSaturdaySubjects =
+        saturdayHeaderIndex >= 0 &&
+        scheduleRows.slice(saturdayHeaderIndex + 1).some((row) => hasSpecificSubject(row.tthSubject))
+
       const scheduleText = scheduleRows
-        .filter((row) => hasSpecificSubject(row.mwfSubject) || hasSpecificSubject(row.tthSubject))
-        .map((row) => `MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()}) | TTH ${row.tthTime}: ${row.tthSubject.trim()} (${row.tthUnits.trim()})`)
+        .flatMap((row) => {
+          const mwfHasSubject = hasSpecificSubject(row.mwfSubject)
+          const tthHasSubject = hasSpecificSubject(row.tthSubject)
+
+          if (row.tthSaturdayHeader) {
+            if (!hasSaturdaySubjects) return []
+            return [`MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()}) | TTH ${row.tthTime}: SATURDAY ()`]
+          }
+
+          if (!mwfHasSubject && !tthHasSubject) return []
+
+          if (mwfHasSubject && tthHasSubject) {
+            return [`MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()}) | TTH ${row.tthTime}: ${row.tthSubject.trim()} (${row.tthUnits.trim()})`]
+          }
+
+          if (mwfHasSubject) {
+            return [`MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()})`]
+          }
+
+          return [`MWF ${row.mwfTime}:  () | TTH ${row.tthTime}: ${row.tthSubject.trim()} (${row.tthUnits.trim()})`]
+        })
         .join('\n')
 
       await api.post('/students/', {

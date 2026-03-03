@@ -1,4 +1,4 @@
-﻿import { FormEvent, useEffect, useMemo, useState } from 'react'
+﻿import { DragEvent, FormEvent, useEffect, useMemo, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
 import { ContinuingIcon, SearchIcon } from '../components/Icons'
@@ -130,10 +130,20 @@ type ContinuingScheduleGridRow = {
   mwfTime: string
   mwfSubject: string
   mwfUnits: string
+  mwfCode?: string
+  mwfTitle?: string
   tthTime: string
   tthSubject: string
   tthUnits: string
+  tthCode?: string
+  tthTitle?: string
   tthSaturdayHeader?: boolean
+}
+
+type ScheduleColumn = 'mwf' | 'tth'
+type ScheduleDragCell = {
+  rowIndex: number
+  column: ScheduleColumn
 }
 
 const DEFAULT_SCHOLARSHIP_LABEL = 'Non-Scholar'
@@ -154,6 +164,19 @@ const formatStatusForSlip = (status: string): string => {
   if (!normalized) return 'ON-GOING'
   if (normalized === 'ongoing') return 'ON-GOING'
   return normalized.toUpperCase().replace(/_/g, ' ')
+}
+
+const hasSpecificSubject = (value: string): boolean => {
+  const normalized = value.trim()
+  if (!normalized) return false
+  if (normalized.toUpperCase() === 'SATURDAY') return false
+  return /[A-Za-z]/.test(normalized)
+}
+
+const formatUnitsForDisplay = (value: string): string => {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return value
+  return Number.isInteger(numericValue) ? String(numericValue) : String(numericValue)
 }
 
 const buildAcademicYearOptions = () => {
@@ -191,6 +214,9 @@ export function ContinuingPage() {
   const [selectedAdviserStatus, setSelectedAdviserStatus] = useState('approved')
   const [selectedDeanStatus, setSelectedDeanStatus] = useState('approved')
   const [continuingFormDate, setContinuingFormDate] = useState(new Date().toISOString().split('T')[0])
+  const [continuingScheduleGrid, setContinuingScheduleGrid] = useState<ContinuingScheduleGridRow[]>([])
+  const [draggingCell, setDraggingCell] = useState<ScheduleDragCell | null>(null)
+  const [dropTarget, setDropTarget] = useState<ScheduleDragCell | null>(null)
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -369,7 +395,38 @@ export function ContinuingPage() {
 
   const scheduleRows = scheduleFromCurrentLoads.length ? scheduleFromCurrentLoads : scheduleFromProspectus
 
-  const buildScheduleText = () => scheduleRows.map((row) => `${row.code} - ${row.title}`).join('\n')
+  const buildScheduleText = () => {
+    const saturdayHeaderIndex = continuingScheduleGrid.findIndex((row) => row.tthSaturdayHeader)
+    const hasSaturdaySubjects =
+      saturdayHeaderIndex >= 0 &&
+      continuingScheduleGrid.slice(saturdayHeaderIndex + 1).some((row) => hasSpecificSubject(row.tthSubject))
+
+    return continuingScheduleGrid
+      .flatMap((row) => {
+        const mwfHasSubject = hasSpecificSubject(row.mwfSubject)
+        const tthHasSubject = hasSpecificSubject(row.tthSubject)
+
+        // Write Saturday marker only when there is a real Saturday subject.
+        if (row.tthSaturdayHeader) {
+          if (!hasSaturdaySubjects) return []
+          return [`MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()}) | TTH ${row.tthTime}: SATURDAY ()`]
+        }
+
+        if (!mwfHasSubject && !tthHasSubject) return []
+
+        if (mwfHasSubject && tthHasSubject) {
+          return [`MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()}) | TTH ${row.tthTime}: ${row.tthSubject.trim()} (${row.tthUnits.trim()})`]
+        }
+
+        if (mwfHasSubject) {
+          return [`MWF ${row.mwfTime}: ${row.mwfSubject.trim()} (${row.mwfUnits.trim()})`]
+        }
+
+        // TTH-only line keeps Enrollment-compatible parser token ("| TTH ...").
+        return [`MWF ${row.mwfTime}:  () | TTH ${row.tthTime}: ${row.tthSubject.trim()} (${row.tthUnits.trim()})`]
+      })
+      .join('\n')
+  }
 
   const continuingTotalUnits = useMemo(() => {
     return scheduleRows.reduce((total, row) => {
@@ -379,7 +436,15 @@ export function ContinuingPage() {
     }, 0)
   }, [scheduleRows, subjects])
 
-  const continuingScheduleGrid = useMemo(() => {
+  const continuingTotalSubjects = useMemo(() => {
+    return continuingScheduleGrid.reduce((total, row) => {
+      const mwfCount = row.mwfCode ? 1 : 0
+      const tthCount = !row.tthSaturdayHeader && row.tthCode ? 1 : 0
+      return total + mwfCount + tthCount
+    }, 0)
+  }, [continuingScheduleGrid])
+
+  const computedContinuingScheduleGrid = useMemo(() => {
     const rowCount = Math.max(CONTINUING_MWF_SLOTS.length, CONTINUING_TTH_SLOTS.length)
     const grid: ContinuingScheduleGridRow[] = Array.from({ length: rowCount }, (_, index) => {
       const tthSlot = CONTINUING_TTH_SLOTS[index] ?? ''
@@ -407,18 +472,136 @@ export function ContinuingPage() {
       const matched = subjects.find((subject) => subject.code === row.code)
       const sectionSuffix = selectedSectionData?.name ? ` - ${selectedSectionData.name}` : ''
       const subjectLabel = `${row.code} ${row.title}${sectionSuffix}`.trim()
-      const unitsLabel = matched?.units ? String(matched.units) : ''
+      const unitsLabel = matched?.units ? formatUnitsForDisplay(String(matched.units)) : ''
       if (cell.column === 'mwf') {
         grid[cell.rowIndex].mwfSubject = subjectLabel
         grid[cell.rowIndex].mwfUnits = unitsLabel
+        grid[cell.rowIndex].mwfCode = row.code
+        grid[cell.rowIndex].mwfTitle = row.title
       } else {
         grid[cell.rowIndex].tthSubject = subjectLabel
         grid[cell.rowIndex].tthUnits = unitsLabel
+        grid[cell.rowIndex].tthCode = row.code
+        grid[cell.rowIndex].tthTitle = row.title
       }
     })
 
     return grid
   }, [scheduleRows, selectedSectionData, subjects])
+
+  useEffect(() => {
+    setContinuingScheduleGrid(computedContinuingScheduleGrid)
+    setDraggingCell(null)
+    setDropTarget(null)
+  }, [computedContinuingScheduleGrid])
+
+  const getScheduleCellKeys = (column: ScheduleColumn) =>
+    column === 'mwf'
+      ? ({ subjectKey: 'mwfSubject', unitsKey: 'mwfUnits', codeKey: 'mwfCode', titleKey: 'mwfTitle' } as const)
+      : ({ subjectKey: 'tthSubject', unitsKey: 'tthUnits', codeKey: 'tthCode', titleKey: 'tthTitle' } as const)
+
+  const isScheduleCellDraggable = (rowIndex: number, column: ScheduleColumn): boolean => {
+    const row = continuingScheduleGrid[rowIndex]
+    if (!row) return false
+    if (column === 'tth' && row.tthSaturdayHeader) return false
+    const { codeKey, titleKey } = getScheduleCellKeys(column)
+    return Boolean(row[codeKey] && row[titleKey])
+  }
+
+  const onScheduleDragStart = (event: DragEvent<HTMLInputElement>, rowIndex: number, column: ScheduleColumn) => {
+    if (!isScheduleCellDraggable(rowIndex, column)) {
+      event.preventDefault()
+      return
+    }
+    setDraggingCell({ rowIndex, column })
+    setDropTarget(null)
+    event.dataTransfer.effectAllowed = 'move'
+  }
+
+  const onScheduleDragOver = (event: DragEvent<HTMLInputElement>, rowIndex: number, column: ScheduleColumn) => {
+    const row = continuingScheduleGrid[rowIndex]
+    if (!draggingCell || !row) return
+    if (column === 'tth' && row.tthSaturdayHeader) return
+    event.preventDefault()
+    setDropTarget({ rowIndex, column })
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  const onScheduleDrop = (event: DragEvent<HTMLInputElement>, rowIndex: number, column: ScheduleColumn) => {
+    event.preventDefault()
+    const row = continuingScheduleGrid[rowIndex]
+    if (!draggingCell || !row) return
+    if (column === 'tth' && row.tthSaturdayHeader) return
+
+    const source = draggingCell
+    setContinuingScheduleGrid((current) => {
+      const sourceRow = current[source.rowIndex]
+      const targetRow = current[rowIndex]
+      if (!sourceRow || !targetRow) return current
+      if (source.rowIndex === rowIndex && source.column === column) return current
+      if (column === 'tth' && targetRow.tthSaturdayHeader) return current
+      if (source.column === 'tth' && sourceRow.tthSaturdayHeader) return current
+
+      const sourceKeys = getScheduleCellKeys(source.column)
+      const targetKeys = getScheduleCellKeys(column)
+
+      const sourceSubject = sourceRow[sourceKeys.subjectKey]
+      const sourceUnits = sourceRow[sourceKeys.unitsKey]
+      const sourceCode = sourceRow[sourceKeys.codeKey]
+      const sourceTitle = sourceRow[sourceKeys.titleKey]
+      const targetSubject = targetRow[targetKeys.subjectKey]
+      const targetUnits = targetRow[targetKeys.unitsKey]
+      const targetCode = targetRow[targetKeys.codeKey]
+      const targetTitle = targetRow[targetKeys.titleKey]
+
+      if (source.rowIndex === rowIndex) {
+        return current.map((rowItem, idx) => {
+          if (idx !== rowIndex) return rowItem
+          return {
+            ...rowItem,
+            [sourceKeys.subjectKey]: targetSubject,
+            [sourceKeys.unitsKey]: targetUnits,
+            [sourceKeys.codeKey]: targetCode,
+            [sourceKeys.titleKey]: targetTitle,
+            [targetKeys.subjectKey]: sourceSubject,
+            [targetKeys.unitsKey]: sourceUnits,
+            [targetKeys.codeKey]: sourceCode,
+            [targetKeys.titleKey]: sourceTitle,
+          }
+        })
+      }
+
+      return current.map((rowItem, idx) => {
+        if (idx === source.rowIndex) {
+          return {
+            ...rowItem,
+            [sourceKeys.subjectKey]: targetSubject,
+            [sourceKeys.unitsKey]: targetUnits,
+            [sourceKeys.codeKey]: targetCode,
+            [sourceKeys.titleKey]: targetTitle,
+          }
+        }
+        if (idx === rowIndex) {
+          return {
+            ...rowItem,
+            [targetKeys.subjectKey]: sourceSubject,
+            [targetKeys.unitsKey]: sourceUnits,
+            [targetKeys.codeKey]: sourceCode,
+            [targetKeys.titleKey]: sourceTitle,
+          }
+        }
+        return rowItem
+      })
+    })
+
+    setDraggingCell(null)
+    setDropTarget(null)
+  }
+
+  const onScheduleDragEnd = () => {
+    setDraggingCell(null)
+    setDropTarget(null)
+  }
 
   const saveChanges = async () => {
     if (!student) return
@@ -608,37 +791,148 @@ export function ContinuingPage() {
 
   const slipRowsFromSavedSchedule = useMemo(() => {
     if (!slipStudent?.subject_load_schedule) return [] as SlipScheduleRow[]
-    return slipStudent.subject_load_schedule
+    const rowMap = new Map<string, {
+      code: string
+      title: string
+      units: string
+      schedule: string[]
+    }>()
+    let inSaturdayBlock = false
+
+    const parseScheduleSide = (rawSide: string) => {
+      const unitsMatch = rawSide.match(/\(([^()]*)\)\s*$/)
+      const units = unitsMatch ? unitsMatch[1].trim() : '-'
+      const withoutUnits =
+        unitsMatch && unitsMatch.index !== undefined
+          ? rawSide.slice(0, unitsMatch.index).trim()
+          : rawSide.trim()
+      const separatorIndex = withoutUnits.indexOf(': ')
+      if (separatorIndex < 0) {
+        return { time: '-', subject: withoutUnits.trim(), units }
+      }
+      const time = withoutUnits.slice(0, separatorIndex).trim()
+      const subject = withoutUnits.slice(separatorIndex + 2).trim()
+      return { time, subject, units }
+    }
+
+    const toSubjectParts = (rawSubject: string) => {
+      const subjectText = rawSubject.trim()
+      if (!subjectText) return { code: '-', title: '-', keyText: '' }
+
+      const normalizedSubject = subjectText
+        .replace(/^\d{1,2}:\d{2}(?:-\d{1,2}:\d{2}(?:\s?(?:AM|PM))?)?:\s*/i, '')
+        .replace(/\s*-\s*[A-Za-z0-9]+$/, '')
+        .trim()
+
+      const matched = subjects
+        .filter((subject) => normalizedSubject.startsWith(`${subject.code} `) || normalizedSubject === subject.code)
+        .sort((a, b) => b.code.length - a.code.length)[0]
+
+      if (matched) {
+        return { code: matched.code, title: matched.title, keyText: `${matched.code}|${matched.title}` }
+      }
+
+      const fallbackTokens = normalizedSubject.split(/\s+/)
+      const fallbackCode = fallbackTokens.slice(0, 2).join(' ') || '-'
+      const fallbackTitle = fallbackTokens.slice(2).join(' ') || normalizedSubject
+      return { code: fallbackCode, title: fallbackTitle, keyText: `${fallbackCode}|${fallbackTitle}` }
+    }
+
+    const upsertScheduleRow = (dayLabel: 'MWF' | 'TTH' | 'SATURDAY', time: string, subjectRaw: string, unitsRaw: string) => {
+      const subjectText = subjectRaw.trim()
+      if (!hasSpecificSubject(subjectText)) return
+
+      const { code, title, keyText } = toSubjectParts(subjectText)
+      if (!keyText) return
+
+      const key = `${keyText}|${unitsRaw.trim()}`
+      const scheduleLabel = `${dayLabel} ${time.trim()}`
+      const existing = rowMap.get(key)
+      if (existing) {
+        if (!existing.schedule.includes(scheduleLabel)) existing.schedule.push(scheduleLabel)
+        return
+      }
+
+      rowMap.set(key, {
+        code,
+        title,
+        units: unitsRaw.trim() ? formatUnitsForDisplay(unitsRaw.trim()) : '-',
+        schedule: [scheduleLabel],
+      })
+    }
+
+    slipStudent.subject_load_schedule
       .split('\n')
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line) => {
-        const match = line.match(/^(.+?)\s*-\s*(.+)$/)
-        const code = match ? match[1].trim() : line
-        const title = match ? match[2].trim() : ''
-        const matchedSubject = subjects.find((subject) => subject.code === code || subject.title === title)
-        return {
-          code,
-          title: title || matchedSubject?.title || '-',
-          units: matchedSubject?.units || '-',
-          schedule: '-',
+      .forEach((line) => {
+        const normalizedLine = line.replace(/\s+/g, ' ').trim()
+        const mwfPrefixMatch = normalizedLine.match(/^MWF\s+/i)
+        if (!mwfPrefixMatch) {
+          const legacyMatch = normalizedLine.match(/^(.+?)\s*-\s*(.+)$/)
+          const code = legacyMatch ? legacyMatch[1].trim() : normalizedLine
+          const title = legacyMatch ? legacyMatch[2].trim() : ''
+          const matchedSubject = subjects.find((subject) => subject.code === code || subject.title === title)
+          rowMap.set(`${code}|${title}|legacy`, {
+            code,
+            title: title || matchedSubject?.title || '-',
+            units: matchedSubject?.units ? formatUnitsForDisplay(String(matchedSubject.units)) : '-',
+            schedule: ['-'],
+          })
+          return
         }
+
+        const splitMatch = normalizedLine.match(/\s\|\sTTH\s/i)
+        if (!splitMatch || splitMatch.index === undefined) {
+          const mwfOnlyRaw = normalizedLine.replace(/^MWF\s+/i, '')
+          const mwfOnly = parseScheduleSide(mwfOnlyRaw)
+          upsertScheduleRow('MWF', mwfOnly.time, mwfOnly.subject, mwfOnly.units)
+          return
+        }
+
+        const splitIndex = splitMatch.index
+        const splitTokenLength = splitMatch[0].length
+        const mwfSideRaw = normalizedLine.slice(mwfPrefixMatch[0].length, splitIndex).trim()
+        const tthSideRaw = normalizedLine.slice(splitIndex + splitTokenLength).trim()
+        const mwfSide = parseScheduleSide(mwfSideRaw)
+        const tthSide = parseScheduleSide(tthSideRaw)
+        upsertScheduleRow('MWF', mwfSide.time, mwfSide.subject, mwfSide.units)
+
+        const tthTime = tthSide.time.trim()
+        const tthSubject = tthSide.subject.trim()
+        if (tthTime.toUpperCase() === 'TIME' && tthSubject.toUpperCase() === 'SATURDAY') {
+          inSaturdayBlock = true
+          return
+        }
+
+        const tthDayLabel: 'TTH' | 'SATURDAY' = inSaturdayBlock ? 'SATURDAY' : 'TTH'
+        upsertScheduleRow(tthDayLabel, tthSide.time, tthSide.subject, tthSide.units)
       })
+
+    return Array.from(rowMap.values()).map((row) => ({
+      code: row.code,
+      title: row.title,
+      units: row.units,
+      schedule: row.schedule.join(', '),
+    }))
   }, [slipStudent, subjects])
 
   const slipDisplayRows = useMemo(() => {
+    if (slipRowsFromSavedSchedule.length) {
+      return slipRowsFromSavedSchedule
+    }
     if (slipCurrentSemesterLoads.length) {
       return slipCurrentSemesterLoads.map((load) => {
         const matchedSubject = subjects.find((subject) => subject.id === load.subject_id || subject.code === load.subject_code)
         return {
           code: load.subject_code,
           title: load.subject_title,
-          units: matchedSubject?.units || '-',
+          units: matchedSubject?.units ? formatUnitsForDisplay(String(matchedSubject.units)) : '-',
           schedule: '-',
         } as SlipScheduleRow
       })
     }
-    return slipRowsFromSavedSchedule
+    return []
   }, [slipCurrentSemesterLoads, slipRowsFromSavedSchedule, subjects])
 
   const slipTotalUnits = useMemo(() => {
@@ -650,15 +944,22 @@ export function ContinuingPage() {
 
   const renderLoadSlip = (copyLabel: string) => (
     <div className="load-slip">
-      <div className="load-slip-top">
-        <div className="load-slip-title">Enrollment Load Slip</div>
-        <div className="load-slip-campus">City College of Bayawan</div>
-        <div className="load-slip-office">Office of the College Registrar</div>
+      <div className="load-slip-header">
+        <div className="load-slip-top-logos" aria-hidden="true">
+          <img src="/Picture2.png" alt="" />
+          <img src="/Picture3.png" alt="" />
+          <img src="/ccb_registrar_logo.png" alt="" />
+        </div>
+        <div className="load-slip-campus">CITY COLLEGE OF BAYAWAN</div>
+        <div className="load-slip-office">OFFICE OF THE COLLEGE REGISTRAR</div>
       </div>
 
       <div className="load-slip-section-title">Student General Information</div>
       <div className="load-slip-grid">
-        <div><span>Student ID Number:</span> {slipStudent?.student_id || '-'}</div>
+        <div>
+          <span>Student ID Number:</span>{' '}
+          <span className="load-slip-student-id-value">{slipStudent?.student_id || '-'}</span>
+        </div>
         <div><span>Department:</span> {slipDepartment?.name || '-'}</div>
         <div><span>School Year:</span> {slipStudent?.academic_year || '-'}</div>
         <div><span>Name:</span> {slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-'}</div>
@@ -727,6 +1028,16 @@ export function ContinuingPage() {
       <div className="load-slip-copy-tag">{copyLabel}</div>
     </div>
   )
+
+  const printLoadSlip = () => {
+    const styleId = 'load-slip-legal-print-style'
+    document.getElementById(styleId)?.remove()
+    const style = document.createElement('style')
+    style.id = styleId
+    style.textContent = '@media print { @page { size: 8.5in 13in; margin: 0.2in; } }'
+    document.head.appendChild(style)
+    window.print()
+  }
 
   return (
     <section className="card">
@@ -819,9 +1130,14 @@ export function ContinuingPage() {
           <div className="enroll-modal load-slip-modal" onClick={(e) => e.stopPropagation()}>
             <div className="enroll-modal-header">
               <h2>Enrollment Load Slip</h2>
-              <button type="button" onClick={() => setIsSlipModalOpen(false)}>
-                Close
-              </button>
+              <div className="modal-header-actions">
+                <button type="button" onClick={printLoadSlip}>
+                  Print
+                </button>
+                <button type="button" onClick={() => setIsSlipModalOpen(false)}>
+                  Close
+                </button>
+              </div>
             </div>
             {!slipStudent ? (
               <div className="enroll-sheet-form">No student selected.</div>
@@ -959,20 +1275,48 @@ export function ContinuingPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {continuingScheduleGrid.map((row, index) => (
-                          <tr key={`continuing-row-${index}`}>
-                            <td><input className="schedule-time-input" value={row.mwfTime} readOnly /></td>
-                            <td><input value={row.mwfSubject} readOnly /></td>
-                            <td><input value={row.mwfUnits} readOnly /></td>
-                            <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>
-                              {row.tthSaturdayHeader ? <span>TIME</span> : <input className="schedule-time-input" value={row.tthTime} readOnly />}
-                            </td>
-                            <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>
-                              {row.tthSaturdayHeader ? <span>SATURDAY</span> : <input value={row.tthSubject} readOnly />}
-                            </td>
-                            <td>{row.tthSaturdayHeader ? null : <input value={row.tthUnits} readOnly />}</td>
-                          </tr>
-                        ))}
+                        {continuingScheduleGrid.map((row, index) => {
+                          const mwfDropActive = dropTarget?.rowIndex === index && dropTarget.column === 'mwf'
+                          const tthDropActive = dropTarget?.rowIndex === index && dropTarget.column === 'tth'
+                          return (
+                            <tr key={`continuing-row-${index}`}>
+                              <td><input className="schedule-time-input" value={row.mwfTime} readOnly /></td>
+                              <td>
+                                <input
+                                  className={mwfDropActive ? 'schedule-drag-over' : ''}
+                                  value={row.mwfSubject}
+                                  readOnly
+                                  draggable={isScheduleCellDraggable(index, 'mwf')}
+                                  onDragStart={(e) => onScheduleDragStart(e, index, 'mwf')}
+                                  onDragOver={(e) => onScheduleDragOver(e, index, 'mwf')}
+                                  onDrop={(e) => onScheduleDrop(e, index, 'mwf')}
+                                  onDragEnd={onScheduleDragEnd}
+                                />
+                              </td>
+                              <td><input value={row.mwfUnits} readOnly /></td>
+                              <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>
+                                {row.tthSaturdayHeader ? <span>TIME</span> : <input className="schedule-time-input" value={row.tthTime} readOnly />}
+                              </td>
+                              <td className={row.tthSaturdayHeader ? 'schedule-sat-cell' : ''}>
+                                {row.tthSaturdayHeader ? (
+                                  <span>SATURDAY</span>
+                                ) : (
+                                  <input
+                                    className={tthDropActive ? 'schedule-drag-over' : ''}
+                                    value={row.tthSubject}
+                                    readOnly
+                                    draggable={isScheduleCellDraggable(index, 'tth')}
+                                    onDragStart={(e) => onScheduleDragStart(e, index, 'tth')}
+                                    onDragOver={(e) => onScheduleDragOver(e, index, 'tth')}
+                                    onDrop={(e) => onScheduleDrop(e, index, 'tth')}
+                                    onDragEnd={onScheduleDragEnd}
+                                  />
+                                )}
+                              </td>
+                              <td>{row.tthSaturdayHeader ? null : <input value={row.tthUnits} readOnly />}</td>
+                            </tr>
+                          )
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -980,7 +1324,7 @@ export function ContinuingPage() {
                   <div className="continuing-summary-row">
                     <span><strong>Remarks:</strong></span>
                     <span><strong>Total Units:</strong> {continuingTotalUnits}</span>
-                    <span><strong>Total Subject/s:</strong> {scheduleRows.length}</span>
+                    <span><strong>Total Subject/s:</strong> {continuingTotalSubjects}</span>
                   </div>
 
                   <div className="sheet-section-title">Approval</div>
@@ -1046,3 +1390,4 @@ export function ContinuingPage() {
     </section>
   )
 }
+
