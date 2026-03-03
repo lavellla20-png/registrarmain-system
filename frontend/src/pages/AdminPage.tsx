@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useEffect, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
+import { SaveIcon } from '../components/Icons'
 
 type Department = {
   id: number
@@ -35,24 +36,6 @@ type Section = {
 type FolderKey = 'departments' | 'programs' | 'terms' | 'sections'
 
 const ADMIN_FOLDERS_STORAGE_KEY = 'ccb_admin_folders_open_state'
-
-const SaveIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    width="16"
-    height="16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-    <path d="M7 21v-8h10v8" />
-    <path d="M7 3v5h8" />
-  </svg>
-)
 
 const defaultOpenFolders: Record<FolderKey, boolean> = {
   departments: true,

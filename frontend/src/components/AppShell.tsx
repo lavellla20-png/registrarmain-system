@@ -1,18 +1,20 @@
-﻿import { FormEvent, useEffect, useState } from 'react'
+﻿import { ComponentType, FormEvent, useEffect, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 
 import { isAuthenticated, login, logout } from '../api'
+import { AdminIcon, ContinuingIcon, DashboardIcon, EnrollmentIcon, ProspectusIcon, TORIcon } from './Icons'
 
 const MOBILE_BREAKPOINT = 1024
 const SIDEBAR_STATE_KEY = 'ccb_sidebar_collapsed'
 const RECENT_MENU_KEY = 'ccb_recent_menus'
 
-const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: 'dashboard' },
-  { path: '/admin', label: 'Admin', icon: 'grid' },
-  { path: '/prospectus', label: 'Prospectus', icon: 'book' },
-  { path: '/enrollment', label: 'Enrollment', icon: 'userPlus' },
-  { path: '/continuing', label: 'Continuing', icon: 'trendUp' },
+const navItems: { path: string; label: string; icon: ComponentType }[] = [
+  { path: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+  { path: '/admin', label: 'Admin', icon: AdminIcon },
+  { path: '/prospectus', label: 'Prospectus', icon: ProspectusIcon },
+  { path: '/enrollment', label: 'Enrollment', icon: EnrollmentIcon },
+  { path: '/continuing', label: 'Continuing', icon: ContinuingIcon },
+  { path: '/transcript', label: 'Transcript', icon: TORIcon },
 ]
 
 function Icon({ name }: { name: string }) {
@@ -40,47 +42,20 @@ function Icon({ name }: { name: string }) {
   if (name === 'logout') {
     return (
       <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M9 8l-4 4 4 4M5 12h10" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M12 5h6a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    )
+  }
+  if (name === 'login') {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M15 16l4-4-4-4M19 12H9" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M12 5H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )
   }
-  if (name === 'grid') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" fill="none" stroke="currentColor" strokeWidth="2" />
-      </svg>
-    )
-  }
-  if (name === 'dashboard') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 13h7v7H4zM4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7z" fill="none" stroke="currentColor" strokeWidth="2" />
-      </svg>
-    )
-  }
-  if (name === 'book') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 5a3 3 0 0 1 3-3h13v18H7a3 3 0 0 0-3 3z" fill="none" stroke="currentColor" strokeWidth="2" />
-        <path d="M7 2v18" fill="none" stroke="currentColor" strokeWidth="2" />
-      </svg>
-    )
-  }
-  if (name === 'userPlus') {
-    return (
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M15 19a5 5 0 0 0-10 0" fill="none" stroke="currentColor" strokeWidth="2" />
-        <circle cx="10" cy="8" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
-        <path d="M19 8v6M16 11h6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-      </svg>
-    )
-  }
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M4 16l5-5 4 4 7-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return null
 }
 
 export function AppShell() {
@@ -154,22 +129,14 @@ export function AppShell() {
     }
   }
 
-  return (
-    <div className={layoutClasses}>
-      {isMobile && isMobileMenuOpen && <button className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)} aria-label="Close menu" />}
-
-      <aside className={sidebarClasses}>
-        <div className="sidebar-header">
-          <h2 className="brand-text">CCB Registrar</h2>
-          {!isMobile && authed && (
-            <button type="button" onClick={toggleSidebar} className="sidebar-toggle" aria-label="Toggle sidebar">
-              <Icon name={isSidebarCollapsed ? 'chevronRight' : 'chevronLeft'} />
-            </button>
-          )}
-        </div>
-
-        {!authed ? (
-          <form onSubmit={handleLogin} className="login-form">
+  if (!authed) {
+    return (
+      <div className="auth-layout">
+        <section className="auth-card">
+          <img src="/ccb_registrar_logo.png" alt="CCB Registrar" className="auth-logo" />
+          <h1 style={{ textAlign: 'center' }}>Office of the Registrar System</h1>
+          <p>Please log in using your Django superuser/staff account.</p>
+          <form onSubmit={handleLogin} className="login-form auth-form">
             <label>
               Username
               <input value={username} onChange={(e) => setUsername(e.target.value)} required />
@@ -178,60 +145,72 @@ export function AppShell() {
               Password
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </label>
-            <button type="submit">Login</button>
+            <button type="submit" className="auth-login-btn">
+              <Icon name="login" />
+              <span>Login</span>
+            </button>
             {authError && <p className="error-text">{authError}</p>}
           </form>
-        ) : (
-          <div className="sidebar-content">
-            <nav className="sidebar-nav">
-              {navItems.map((item) => (
+        </section>
+      </div>
+    )
+  }
+
+  return (
+    <div className={layoutClasses}>
+      {isMobile && isMobileMenuOpen && <button className="sidebar-overlay" onClick={() => setIsMobileMenuOpen(false)} aria-label="Close menu" />}
+
+      <aside className={sidebarClasses}>
+        <div className="sidebar-header">
+          <img src="/ccb_registrar_logo.png" alt="CCB Registrar" className="brand-logo" />
+          {!isMobile && (
+            <button type="button" onClick={toggleSidebar} className="sidebar-toggle" aria-label="Toggle sidebar">
+              <Icon name={isSidebarCollapsed ? 'chevronRight' : 'chevronLeft'} />
+            </button>
+          )}
+        </div>
+
+        <div className="sidebar-content">
+          <nav className="sidebar-nav">
+            {navItems.map(({ path, label, icon: ItemIcon }) => (
+              <div key={path} className="nav-item-wrapper">
                 <NavLink
-                  key={item.path}
-                  to={item.path}
+                  to={path}
                   className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
                   onClick={() => {
-                    recordRecentMenu(item.path, item.label)
+                    recordRecentMenu(path, label)
                     if (isMobile) {
                       setIsMobileMenuOpen(false)
                     }
                   }}
+                  title={isSidebarCollapsed && !isMobile ? label : ''}
                 >
                   <span className="nav-icon">
-                    <Icon name={item.icon} />
+                    <ItemIcon />
                   </span>
-                  <span className="nav-label">{item.label}</span>
+                  <span className="nav-label">{label}</span>
                 </NavLink>
-              ))}
-            </nav>
-            <button type="button" onClick={handleLogout} className="logout-btn">
-              <span className="nav-icon icon-inline">
-                <Icon name="logout" />
-              </span>
-              <span className="nav-label">{isSidebarCollapsed && !isMobile ? '' : 'Logout'}</span>
-            </button>
-          </div>
-        )}
+              </div>
+            ))}
+          </nav>
+          <button type="button" onClick={handleLogout} className="logout-btn" title={isSidebarCollapsed && !isMobile ? 'Logout' : ''}>
+            <span className="nav-icon icon-inline">
+              <Icon name="logout" />
+            </span>
+            <span className="nav-label">{isSidebarCollapsed && !isMobile ? '' : 'Logout'}</span>
+          </button>
+        </div>
       </aside>
 
       <main className="main">
-        {authed && (
-          <div className="main-toolbar">
-            {isMobile && (
-              <button type="button" onClick={toggleSidebar} className="hamburger-btn" aria-label="Open menu">
-                <Icon name="menu" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {authed ? (
-          <Outlet />
-        ) : (
-          <section className="card">
-            <h1>Local Registrar System</h1>
-            <p>Please log in using your Django superuser/staff account.</p>
-          </section>
-        )}
+        <div className="main-toolbar">
+          {isMobile && (
+            <button type="button" onClick={toggleSidebar} className="hamburger-btn" aria-label="Open menu">
+              <Icon name="menu" />
+            </button>
+          )}
+        </div>
+        <Outlet />
       </main>
     </div>
   )

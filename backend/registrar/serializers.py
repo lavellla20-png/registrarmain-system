@@ -1,6 +1,6 @@
 ﻿from rest_framework import serializers
 
-from .models import AcademicTerm, AuditLog, Department, Program, ProspectusEntry, Section, Student, StudentLoad, Subject
+from .models import AcademicHistory, AcademicTerm, AuditLog, Department, Program, ProspectusEntry, Section, Student, StudentLoad, Subject
 from .services import _prospectus_entries_for_student
 
 
@@ -79,6 +79,12 @@ class StudentLoadSerializer(serializers.ModelSerializer):
                 )
 
         return attrs
+
+
+class AcademicHistorySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AcademicHistory
+        fields = '__all__'
 
 
 class StudentDetailSerializer(serializers.ModelSerializer):

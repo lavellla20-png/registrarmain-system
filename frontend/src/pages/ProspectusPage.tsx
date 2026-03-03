@@ -1,6 +1,7 @@
 ﻿import { FormEvent, useEffect, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
+import { AddIcon, ChevronDownIcon, FolderIcon, RemoveIcon, SaveIcon } from '../components/Icons'
 
 type Program = {
   id: number
@@ -34,57 +35,6 @@ type Section = {
   semester: number
 }
 
-const AddIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    width="16"
-    height="16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-)
-
-const RemoveIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    width="16"
-    height="16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-)
-
-const SaveIcon = () => (
-  <svg
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    width="16"
-    height="16"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-    <path d="M7 21v-8h10v8" />
-    <path d="M7 3v5h8" />
-  </svg>
-)
-
 const buildAcademicYearOptions = () => {
   const currentYear = new Date().getFullYear()
   return Array.from({ length: 21 }, (_, i) => {
@@ -92,6 +42,8 @@ const buildAcademicYearOptions = () => {
     return `${start}-${start + 1}`
   })
 }
+
+const PROSPECTUS_FOLDERS_STORAGE_KEY = 'ccb_prospectus_folders_open_state'
 
 export function ProspectusPage() {
   const [programs, setPrograms] = useState<Program[]>([])
@@ -112,10 +64,31 @@ export function ProspectusPage() {
   const [entrySection, setEntrySection] = useState('')
   const [entryPrerequisite, setEntryPrerequisite] = useState('')
   const [editingEntryId, setEditingEntryId] = useState<number | null>(null)
+  const [copyProgram, setCopyProgram] = useState('')
+  const [copyYearLevel, setCopyYearLevel] = useState('1')
+  const [copySemester, setCopySemester] = useState('1')
+  const [copyAcademicYear, setCopyAcademicYear] = useState('')
+  const [copySourceSection, setCopySourceSection] = useState('')
+  const [copyTargetSection, setCopyTargetSection] = useState('')
+  const [filterSection, setFilterSection] = useState('all')
+  const [filterYearLevel, setFilterYearLevel] = useState('all')
+  const [filterSemester, setFilterSemester] = useState('all')
+  const [filterAcademicYear, setFilterAcademicYear] = useState('all')
+  const [subjectSearch, setSubjectSearch] = useState('')
 
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [viewDetails, setViewDetails] = useState('')
+  const [openFolders, setOpenFolders] = useState<Record<string, boolean>>(() => {
+    if (typeof window === 'undefined') return {}
+    try {
+      const raw = window.localStorage.getItem(PROSPECTUS_FOLDERS_STORAGE_KEY)
+      if (!raw) return {}
+      return JSON.parse(raw) as Record<string, boolean>
+    } catch {
+      return {}
+    }
+  })
 
   const academicYearOptions = buildAcademicYearOptions()
 
@@ -135,6 +108,10 @@ export function ProspectusPage() {
   useEffect(() => {
     loadData().catch((err) => setError(getErrorMessage(err)))
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(PROSPECTUS_FOLDERS_STORAGE_KEY, JSON.stringify(openFolders))
+  }, [openFolders])
 
   const withFeedback = async (action: () => Promise<void>, message: string) => {
     setError('')
@@ -164,6 +141,15 @@ export function ProspectusPage() {
     setEntrySection('')
     setEntryPrerequisite('')
     setEditingEntryId(null)
+  }
+
+  const resetCopySectionForm = () => {
+    setCopyProgram('')
+    setCopyYearLevel('1')
+    setCopySemester('1')
+    setCopyAcademicYear('')
+    setCopySourceSection('')
+    setCopyTargetSection('')
   }
 
   const submitSubject = async (event: FormEvent<HTMLFormElement>) => {
@@ -210,6 +196,21 @@ export function ProspectusPage() {
     }, `${label} deleted.`)
   }
 
+  const submitCopySection = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    await withFeedback(async () => {
+      await api.post('/prospectus/copy-section/', {
+        program: Number(copyProgram),
+        year_level: Number(copyYearLevel),
+        semester: Number(copySemester),
+        academic_year: copyAcademicYear,
+        source_section: Number(copySourceSection),
+        target_section: Number(copyTargetSection),
+      })
+      resetCopySectionForm()
+    }, 'Prospectus entries copied to target section.')
+  }
+
   const handleView = (title: string, details: Record<string, unknown>) => {
     setViewDetails(`${title}: ${Object.entries(details)
       .map(([k, v]) => `${k}=${String(v)}`)
@@ -250,6 +251,12 @@ export function ProspectusPage() {
     const section = sections.find((item) => item.id === id)
     return section ? `${section.name} (Year ${section.year_level}, Sem ${section.semester})` : String(id)
   }
+  const semesterLabel = (semester: number) => {
+    if (semester === 1) return '1st Semester'
+    if (semester === 2) return '2nd Semester'
+    if (semester === 3) return 'Summer'
+    return `Sem ${semester}`
+  }
 
   const filteredSections = sections.filter(
     (section) =>
@@ -257,6 +264,60 @@ export function ProspectusPage() {
       (!entryYearLevel || String(section.year_level) === entryYearLevel) &&
       (!entrySemester || String(section.semester) === entrySemester),
   )
+  const copyFilteredSections = sections.filter(
+    (section) =>
+      (!copyProgram || String(section.program) === copyProgram) &&
+      (!copyYearLevel || String(section.year_level) === copyYearLevel) &&
+      (!copySemester || String(section.semester) === copySemester),
+  )
+  const filteredEntries = entries.filter(
+    (entry) =>
+      (filterSection === 'all' || String(entry.section ?? '') === filterSection) &&
+      (filterYearLevel === 'all' || String(entry.year_level) === filterYearLevel) &&
+      (filterSemester === 'all' || String(entry.semester) === filterSemester) &&
+      (filterAcademicYear === 'all' || entry.academic_year === filterAcademicYear),
+  )
+  const sectionFilterOptions = sections
+    .filter((section) => (filterYearLevel === 'all' ? true : String(section.year_level) === filterYearLevel))
+    .filter((section) => (filterSemester === 'all' ? true : String(section.semester) === filterSemester))
+  const filteredSubjects = subjects.filter((subject) => {
+    const query = subjectSearch.trim().toLowerCase()
+    if (!query) return true
+    return subject.code.toLowerCase().includes(query) || subject.title.toLowerCase().includes(query)
+  })
+  const academicYearFilterOptions = Array.from(new Set(entries.map((entry) => entry.academic_year).filter(Boolean))).sort((a, b) =>
+    b.localeCompare(a),
+  )
+  const groupedEntries = filteredEntries.reduce<Record<string, ProspectusEntry[]>>((groups, entry) => {
+    const key = `${entry.program}|${entry.section ?? 'none'}|${entry.year_level}|${entry.semester}|${entry.academic_year || 'none'}`
+    if (!groups[key]) groups[key] = []
+    groups[key].push(entry)
+    return groups
+  }, {})
+  const folderKeys = Object.keys(groupedEntries).sort((a, b) => {
+    const [aProgram, aSection, aYear, aSem, aAcademicYear] = a.split('|')
+    const [bProgram, bSection, bYear, bSem, bAcademicYear] = b.split('|')
+    const byProgram = programLabel(Number(aProgram)).localeCompare(programLabel(Number(bProgram)))
+    if (byProgram !== 0) return byProgram
+    const byYear = Number(aYear) - Number(bYear)
+    if (byYear !== 0) return byYear
+    const bySemester = Number(aSem) - Number(bSem)
+    if (bySemester !== 0) return bySemester
+    const byAcademicYear = bAcademicYear.localeCompare(aAcademicYear)
+    if (byAcademicYear !== 0) return byAcademicYear
+    const aSectionLabel = sectionLabel(aSection === 'none' ? null : Number(aSection))
+    const bSectionLabel = sectionLabel(bSection === 'none' ? null : Number(bSection))
+    return aSectionLabel.localeCompare(bSectionLabel)
+  })
+  const onFolderToggle = (key: string, isOpen: boolean) => {
+    setOpenFolders((current) => ({ ...current, [key]: isOpen }))
+  }
+  const isFolderOpen = (key: string, index: number) => {
+    if (Object.prototype.hasOwnProperty.call(openFolders, key)) {
+      return openFolders[key]
+    }
+    return index === 0
+  }
 
   return (
     <section className="card">
@@ -380,8 +441,71 @@ export function ProspectusPage() {
         )}
       </form>
 
+      <h2 className="section-title">Copy Prospectus by Section</h2>
+      <form className="form-grid" onSubmit={submitCopySection}>
+        <select value={copyProgram} onChange={(e) => setCopyProgram(e.target.value)} required>
+          <option value="">Select Program</option>
+          {programs.map((program) => (
+            <option key={program.id} value={program.id}>
+              {program.name}
+            </option>
+          ))}
+        </select>
+
+        <select value={copyYearLevel} onChange={(e) => setCopyYearLevel(e.target.value)}>
+          <option value="1">Year 1</option>
+          <option value="2">Year 2</option>
+          <option value="3">Year 3</option>
+          <option value="4">Year 4</option>
+        </select>
+
+        <select value={copySemester} onChange={(e) => setCopySemester(e.target.value)}>
+          <option value="1">1st Semester</option>
+          <option value="2">2nd Semester</option>
+          <option value="3">Summer</option>
+        </select>
+
+        <select value={copyAcademicYear} onChange={(e) => setCopyAcademicYear(e.target.value)} required>
+          <option value="">Select Academic Year</option>
+          {academicYearOptions.map((yearLabel) => (
+            <option key={yearLabel} value={yearLabel}>
+              {yearLabel}
+            </option>
+          ))}
+        </select>
+
+        <select value={copySourceSection} onChange={(e) => setCopySourceSection(e.target.value)} required>
+          <option value="">Select Source Section</option>
+          {copyFilteredSections.map((section) => (
+            <option key={section.id} value={section.id}>
+              {sectionLabel(section.id)}
+            </option>
+          ))}
+        </select>
+
+        <select value={copyTargetSection} onChange={(e) => setCopyTargetSection(e.target.value)} required>
+          <option value="">Select Target Section</option>
+          {copyFilteredSections.map((section) => (
+            <option key={section.id} value={section.id}>
+              {sectionLabel(section.id)}
+            </option>
+          ))}
+        </select>
+
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SaveIcon /> Copy to Section
+        </button>
+      </form>
+
       <h2 className="section-title">Subject Catalog</h2>
-      <div className="table-wrap">
+      <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
+        <input
+          placeholder="Search by code or title"
+          value={subjectSearch}
+          onChange={(e) => setSubjectSearch(e.target.value)}
+        />
+      </form>
+      <div className="table-wrap subject-catalog-scroll">
         <table>
           <thead>
             <tr>
@@ -392,7 +516,7 @@ export function ProspectusPage() {
             </tr>
           </thead>
           <tbody>
-            {subjects.map((subject) => (
+            {filteredSubjects.map((subject) => (
               <tr key={subject.id}>
                 <td>{subject.code}</td>
                 <td>{subject.title}</td>
@@ -410,50 +534,113 @@ export function ProspectusPage() {
                 </td>
               </tr>
             ))}
+            {!filteredSubjects.length && (
+              <tr>
+                <td colSpan={4}>No subjects found for the current search.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
       <h2 className="section-title">Prospectus Entries</h2>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Program</th>
-              <th>Subject</th>
-              <th>Year</th>
-              <th>Sem</th>
-              <th>Academic Year</th>
-              <th>Section</th>
-              <th>Prerequisite</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {entries.map((entry) => (
-              <tr key={entry.id}>
-                <td>{programLabel(entry.program)}</td>
-                <td>{subjectLabel(entry.subject)}</td>
-                <td>{entry.year_level}</td>
-                <td>{entry.semester}</td>
-                <td>{entry.academic_year || '-'}</td>
-                <td>{sectionLabel(entry.section)}</td>
-                <td>{subjectLabel(entry.prerequisite)}</td>
-                <td>
-                  <button type="button" onClick={() => handleView('ProspectusEntry', entry)}>
-                    View
-                  </button>
-                  <button type="button" onClick={() => startEditEntry(entry)}>
-                    Edit
-                  </button>
-                  <button type="button" onClick={() => handleDelete('prospectus', entry.id, `Prospectus entry ${entry.id}`)}>
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <form className="form-grid" onSubmit={(event) => event.preventDefault()}>
+        <select value={filterSection} onChange={(e) => setFilterSection(e.target.value)}>
+          <option value="all">All Sections</option>
+          {sectionFilterOptions.map((section) => (
+            <option key={section.id} value={section.id}>
+              {section.name} (Year {section.year_level}, Sem {section.semester})
+            </option>
+          ))}
+        </select>
+
+        <select value={filterYearLevel} onChange={(e) => setFilterYearLevel(e.target.value)}>
+          <option value="all">All Year Levels</option>
+          <option value="1">Year 1</option>
+          <option value="2">Year 2</option>
+          <option value="3">Year 3</option>
+          <option value="4">Year 4</option>
+        </select>
+
+        <select value={filterSemester} onChange={(e) => setFilterSemester(e.target.value)}>
+          <option value="all">All Semesters</option>
+          <option value="1">1st Semester</option>
+          <option value="2">2nd Semester</option>
+          <option value="3">Summer</option>
+        </select>
+
+        <select value={filterAcademicYear} onChange={(e) => setFilterAcademicYear(e.target.value)}>
+          <option value="all">All Academic Years</option>
+          {academicYearFilterOptions.map((yearLabel) => (
+            <option key={yearLabel} value={yearLabel}>
+              {yearLabel}
+            </option>
+          ))}
+        </select>
+      </form>
+      {!folderKeys.length && <p>No prospectus folders found for the selected Section, Year Level, Semester, and Academic Year.</p>}
+      <div className="admin-folders prospectus-folder-scroll">
+        {folderKeys.map((folderKey, index) => {
+          const [programId, sectionId, yearLevel, semester, academicYear] = folderKey.split('|')
+          const folderEntries = groupedEntries[folderKey]
+          const folderProgramLabel = programLabel(Number(programId))
+          const folderSectionLabel = sectionLabel(sectionId === 'none' ? null : Number(sectionId))
+          return (
+            <details
+              key={folderKey}
+              className="admin-folder admin-folder-animated"
+              open={isFolderOpen(folderKey, index)}
+              onToggle={(event) => onFolderToggle(folderKey, event.currentTarget.open)}
+            >
+              <summary>
+                <span className="folder-title folder-title-with-icon">
+                  <FolderIcon />
+                  {folderProgramLabel} | {folderSectionLabel} | Year {yearLevel} | {semesterLabel(Number(semester))} | {academicYear === 'none' ? '-' : academicYear}
+                </span>
+                <span className="folder-summary-right">
+                  <span className="folder-count">{folderEntries.length}</span>
+                  <span className="folder-toggle-icon" aria-hidden="true">
+                    <ChevronDownIcon />
+                  </span>
+                </span>
+              </summary>
+              <div className="folder-collapse-content">
+                <div className="folder-body table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Program</th>
+                        <th>Subject</th>
+                        <th>Prerequisite</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {folderEntries.map((entry) => (
+                        <tr key={entry.id}>
+                          <td>{programLabel(entry.program)}</td>
+                          <td>{subjectLabel(entry.subject)}</td>
+                          <td>{subjectLabel(entry.prerequisite)}</td>
+                          <td>
+                            <button type="button" onClick={() => handleView('ProspectusEntry', entry)}>
+                              View
+                            </button>
+                            <button type="button" onClick={() => startEditEntry(entry)}>
+                              Edit
+                            </button>
+                            <button type="button" onClick={() => handleDelete('prospectus', entry.id, `Prospectus entry ${entry.id}`)}>
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </details>
+          )
+        })}
       </div>
     </section>
   )

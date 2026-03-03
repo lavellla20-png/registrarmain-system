@@ -9,6 +9,7 @@ import { ContinuingPage } from './pages/ContinuingPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { EnrollmentPage } from './pages/EnrollmentPage'
 import { ProspectusPage } from './pages/ProspectusPage'
+import { TranscriptPage } from './pages/TranscriptPage'
 import './styles.css'
 
 const router = createBrowserRouter([
@@ -22,6 +23,7 @@ const router = createBrowserRouter([
       { path: 'prospectus', element: <ProspectusPage /> },
       { path: 'enrollment', element: <EnrollmentPage /> },
       { path: 'continuing', element: <ContinuingPage /> },
+      { path: 'transcript', element: <TranscriptPage /> },
     ],
   },
 ])

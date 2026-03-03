@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
+import { AddUserIcon, SearchIcon } from '../components/Icons'
 
 type Subject = {
   id: number
@@ -31,8 +32,15 @@ type Program = {
   id: number
   code: string
   name: string
+  department: number
   program_adviser: string
   school_dean: string
+}
+
+type Department = {
+  id: number
+  name: string
+  code: string
 }
 
 type Section = {
@@ -40,6 +48,20 @@ type Section = {
   name: string
   program: number
   year_level: number
+  semester: number
+}
+
+type EnrolledStudent = {
+  id: number
+  student_id: string
+  first_name: string
+  last_name: string
+  program: number
+  section: number | null
+  year_level: number
+  academic_year: string
+  gender: string
+  middle_name: string
   semester: number
 }
 
@@ -51,6 +73,16 @@ type StudentLoad = {
   subject_id: number
   subject_code: string
   subject_title: string
+}
+
+type AcademicHistoryRecord = {
+  id: number
+  student: number
+  academic_year: string
+  semester: number
+  status: string
+  scholarship: string
+  date_of_birth: string | null
 }
 
 type StudentDetail = {
@@ -186,6 +218,24 @@ const initialStudentForm: StudentCreateForm = {
 
 const nullableNumber = (value: string): number | null => (value ? Number(value) : null)
 
+const formatDateValue = (value: string | null): string => {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString()
+}
+
+const formatStatusForSlip = (status: string): string => {
+  const normalized = status.trim().toLowerCase()
+  if (!normalized) return 'ON-GOING'
+  if (normalized === 'ongoing') return 'ON-GOING'
+  return normalized.toUpperCase().replace(/_/g, ' ')
+}
+
+const DEFAULT_SCHOLARSHIP_LABEL = 'Non-Scholar'
+const PREPARED_BY_NAME = 'KRISTIN LILIA J. RUELO'
+const PREPARED_BY_TITLE = 'College Registrar'
+
 const calculateAgeFromDob = (dob: string): number | null => {
   if (!dob) return null
   const birthDate = new Date(dob)
@@ -259,14 +309,22 @@ export function EnrollmentPage() {
   const [student, setStudent] = useState<StudentDetail | null>(null)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [terms, setTerms] = useState<AcademicTerm[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [programs, setPrograms] = useState<Program[]>([])
   const [sections, setSections] = useState<Section[]>([])
   const [prospectusEntries, setProspectusEntries] = useState<ProspectusEntry[]>([])
   const [previewSubjects, setPreviewSubjects] = useState<Subject[]>([])
+  const [enrolledStudents, setEnrolledStudents] = useState<EnrolledStudent[]>([])
 
   const [studentForm, setStudentForm] = useState<StudentCreateForm>(initialStudentForm)
   const [scheduleRows, setScheduleRows] = useState<ScheduleRow[]>(buildInitialScheduleRows)
   const [isEnrollModalOpen, setIsEnrollModalOpen] = useState(false)
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false)
+  const [viewStudent, setViewStudent] = useState<StudentDetail | null>(null)
+  const [isViewLoading, setIsViewLoading] = useState(false)
+  const [viewStatus, setViewStatus] = useState('ON-GOING')
+  const [viewScholarship, setViewScholarship] = useState('')
+  const [viewDateOfBirth, setViewDateOfBirth] = useState<string | null>(null)
 
   const [selectedSubject, setSelectedSubject] = useState('')
   const [selectedTerm, setSelectedTerm] = useState('')
@@ -277,16 +335,30 @@ export function EnrollmentPage() {
   const computedAge = calculateAgeFromDob(studentForm.date_of_birth)
   const academicYearOptions = useMemo(buildAcademicYearOptions, [])
 
+  const loadEnrolledStudents = useCallback(async () => {
+    try {
+      const response = await api.get<EnrolledStudent[]>('/students/')
+      const newlyEnrolledStudents = response.data.filter(
+        (student) => student.year_level === 1 && Number(student.semester) === 1,
+      )
+      setEnrolledStudents(newlyEnrolledStudents)
+    } catch (error) {
+      setError(getErrorMessage(error))
+    }
+  }, [])
+
   const loadReferenceData = async () => {
-    const [subjectResp, termResp, programResp, sectionResp, prospectusResp] = await Promise.all([
+    const [subjectResp, termResp, departmentResp, programResp, sectionResp, prospectusResp] = await Promise.all([
       api.get<Subject[]>('/subjects/'),
       api.get<AcademicTerm[]>('/terms/'),
+      api.get<Department[]>('/departments/'),
       api.get<Program[]>('/programs/'),
       api.get<Section[]>('/sections/'),
       api.get<ProspectusEntry[]>('/prospectus/'),
     ])
     setSubjects(subjectResp.data)
     setTerms(termResp.data)
+    setDepartments(departmentResp.data)
     setPrograms(programResp.data)
     setSections(sectionResp.data)
     setProspectusEntries(prospectusResp.data)
@@ -300,11 +372,54 @@ export function EnrollmentPage() {
 
   useEffect(() => {
     loadReferenceData().catch((err) => setError(getErrorMessage(err)))
+    loadEnrolledStudents().catch((err) => setError(getErrorMessage(err)))
   }, [])
 
   const refreshStudent = async (studentId: string) => {
     const studentResp = await api.get<StudentDetail>(`/students/${studentId}/`)
     setStudent(studentResp.data)
+  }
+
+  const handleViewStudent = async (studentId: string) => {
+    setError('')
+    setSuccess('')
+    setIsViewLoading(true)
+    try {
+      const studentResp = await api.get<StudentDetail>(`/students/${studentId}/`)
+      const selectedStudent = studentResp.data
+      setViewStudent(selectedStudent)
+
+      let resolvedStatus = 'ON-GOING'
+      let resolvedScholarship = selectedStudent.scholarship || ''
+      let resolvedDateOfBirth = selectedStudent.date_of_birth
+
+      try {
+        const historyResp = await api.get<AcademicHistoryRecord[]>('/academic-history/')
+        const matchedHistory = historyResp.data.find(
+          (history) =>
+            history.student === selectedStudent.id &&
+            history.academic_year === selectedStudent.academic_year &&
+            Number(history.semester) === Number(selectedStudent.semester),
+        )
+        if (matchedHistory) {
+          resolvedStatus = formatStatusForSlip(matchedHistory.status)
+          if (!resolvedScholarship) resolvedScholarship = matchedHistory.scholarship || ''
+          if (!resolvedDateOfBirth) resolvedDateOfBirth = matchedHistory.date_of_birth
+        }
+      } catch (historyErr) {
+        resolvedStatus = 'ON-GOING'
+      }
+
+      setViewStatus(resolvedStatus)
+      setViewScholarship(resolvedScholarship || DEFAULT_SCHOLARSHIP_LABEL)
+      setViewDateOfBirth(resolvedDateOfBirth)
+      setIsViewModalOpen(true)
+    } catch (err) {
+      setViewStudent(null)
+      setError(getErrorMessage(err))
+    } finally {
+      setIsViewLoading(false)
+    }
   }
 
   const searchStudent = async (event: FormEvent<HTMLFormElement>) => {
@@ -313,6 +428,7 @@ export function EnrollmentPage() {
     setSuccess('')
     setPreviewSubjects([])
     try {
+      setError('')
       await refreshStudent(searchId)
     } catch (err) {
       setStudent(null)
@@ -409,7 +525,7 @@ export function EnrollmentPage() {
         civil_status: studentForm.civil_status,
         nationality: studentForm.nationality,
         admission_date: studentForm.admission_date || null,
-        scholarship: studentForm.scholarship,
+        scholarship: studentForm.scholarship || DEFAULT_SCHOLARSHIP_LABEL,
         program: Number(studentForm.program),
         section: nullableNumber(studentForm.section),
         year_level: Number(studentForm.year_level),
@@ -428,15 +544,73 @@ export function EnrollmentPage() {
         senior_high_school: studentForm.senior_high_school,
         senior_high_track_strand: studentForm.senior_high_track_strand,
         subject_load_schedule: scheduleText,
-        adviser_name: studentForm.adviser_name,
-        adviser_approval_status: studentForm.adviser_approval_status,
-        dean_name: studentForm.dean_name,
-        dean_approval_status: studentForm.dean_approval_status,
-        is_active: true,
       })
+
+      // Create AcademicHistory record for 1st Year - 1st Semester
+      try {
+        const studentResponse = await api.get(`/students/${studentForm.student_id}/`)
+        const createdStudent = studentResponse.data
+        
+        await api.post('/academic-history/', {
+          student: createdStudent.id,
+          academic_year: studentForm.academic_year,
+          year_level: 1,  // Always 1st Year for new enrollment
+          semester: 1,    // Always 1st Semester for new enrollment
+          program: Number(studentForm.program),
+          section: nullableNumber(studentForm.section),
+          
+          // Personal Information (snapshot)
+          first_name: studentForm.first_name,
+          last_name: studentForm.last_name,
+          middle_name: studentForm.middle_name,
+          extension_name: studentForm.extension_name,
+          gender: studentForm.gender,
+          date_of_birth: studentForm.date_of_birth || null,
+          age: computedAge,
+          civil_status: studentForm.civil_status,
+          nationality: studentForm.nationality,
+          admission_date: studentForm.admission_date || null,
+          scholarship: studentForm.scholarship || DEFAULT_SCHOLARSHIP_LABEL,
+          course: '',  // Will be populated from program if needed
+          
+          // Contact Information (snapshot)
+          home_address: studentForm.home_address,
+          postal_code: studentForm.postal_code,
+          email_address: studentForm.email_address,
+          contact_number: studentForm.contact_number,
+          
+          // Family Information (snapshot)
+          mother_maiden_name: studentForm.mother_maiden_name,
+          mother_contact_number: studentForm.mother_contact_number,
+          father_name: studentForm.father_name,
+          father_contact_number: studentForm.father_contact_number,
+          
+          // Educational Background (snapshot)
+          elementary_school: studentForm.elementary_school,
+          junior_high_school: studentForm.junior_high_school,
+          senior_high_school: studentForm.senior_high_school,
+          senior_high_track_strand: studentForm.senior_high_track_strand,
+          
+          // Academic Information for this Semester
+          subject_load_schedule: scheduleText,
+          adviser_name: '',  // Will be set during approval
+          adviser_approval_status: 'pending',
+          dean_name: '',  // Will be set during approval
+          dean_approval_status: 'pending',
+          
+          // Status and Dates
+          status: 'ongoing',
+          start_date: new Date().toISOString().split('T')[0],  // Today's date
+          end_date: null,
+        })
+      } catch (historyErr) {
+        // If academic-history endpoint doesn't exist, show warning but continue
+        console.warn('AcademicHistory endpoint not implemented yet, proceeding with enrollment only')
+      }
 
       setSearchId(studentForm.student_id)
       await refreshStudent(studentForm.student_id)
+      await loadEnrolledStudents()
       closeEnrollModal()
       setSuccess('Student successfully registered/enrolled.')
     } catch (err) {
@@ -514,14 +688,172 @@ export function EnrollmentPage() {
     }
   }
 
-  const filteredSections = studentForm.program
-    ? sections.filter(
-        (s) =>
-          s.program === Number(studentForm.program) &&
-          s.year_level === Number(studentForm.year_level) &&
-          s.semester === Number(studentForm.semester)
+  const hasRequiredSectionFilters = Boolean(
+    studentForm.program && studentForm.year_level && studentForm.academic_year && studentForm.semester,
+  )
+  const hasMatchingAcademicTerm = terms.some(
+    (term) => term.year_label === studentForm.academic_year && String(term.semester) === studentForm.semester,
+  )
+  const prospectusSectionIds = new Set(
+    prospectusEntries
+      .filter(
+        (entry) =>
+          entry.program === Number(studentForm.program) &&
+          entry.year_level === Number(studentForm.year_level) &&
+          entry.semester === Number(studentForm.semester) &&
+          entry.academic_year === studentForm.academic_year &&
+          entry.section !== null,
       )
-    : sections
+      .map((entry) => entry.section as number),
+  )
+  const filteredSections =
+    hasRequiredSectionFilters && hasMatchingAcademicTerm
+      ? sections.filter(
+          (s) =>
+            s.program === Number(studentForm.program) &&
+            s.year_level === Number(studentForm.year_level) &&
+            s.semester === Number(studentForm.semester) &&
+            prospectusSectionIds.has(s.id),
+        )
+      : []
+  const sectionPlaceholder = !hasRequiredSectionFilters
+    ? 'Select Program, Year Level, Academic Year, and Semester first'
+    : !hasMatchingAcademicTerm
+      ? 'No matching academic term for selected year/semester'
+      : filteredSections.length
+        ? 'Section'
+        : 'No sections with prospectus schedule available'
+
+  useEffect(() => {
+    setStudentForm((prev) => {
+      if (!prev.section) return prev
+      const isStillValid =
+        hasRequiredSectionFilters &&
+        hasMatchingAcademicTerm &&
+        filteredSections.some((section) => String(section.id) === prev.section)
+      if (isStillValid) return prev
+      return { ...prev, section: '' }
+    })
+  }, [
+    studentForm.program,
+    studentForm.year_level,
+    studentForm.academic_year,
+    studentForm.semester,
+    hasRequiredSectionFilters,
+    hasMatchingAcademicTerm,
+    filteredSections,
+  ])
+
+  const currentSemesterLoads = useMemo(() => {
+    if (!student || !student.academic_year || !student.semester) return [] as StudentLoad[]
+    const currentTermLabel = `${student.academic_year} - Sem ${student.semester}`
+    return student.loads.filter((load) => load.term_label === currentTermLabel && load.status === 'enrolled')
+  }, [student])
+
+  const viewCurrentSemesterLoads = useMemo(() => {
+    if (!viewStudent || !viewStudent.academic_year || !viewStudent.semester) return [] as StudentLoad[]
+    const currentTermLabel = `${viewStudent.academic_year} - Sem ${viewStudent.semester}`
+    return viewStudent.loads.filter((load) => load.term_label === currentTermLabel && load.status === 'enrolled')
+  }, [viewStudent])
+
+  const viewTotalUnits = useMemo(() => {
+    return viewCurrentSemesterLoads.reduce((total, load) => {
+      const matchedSubject = subjects.find((subject) => subject.id === load.subject_id || subject.code === load.subject_code)
+      const units = matchedSubject ? Number(matchedSubject.units) : 0
+      return total + (Number.isFinite(units) ? units : 0)
+    }, 0)
+  }, [viewCurrentSemesterLoads, subjects])
+
+  const viewProgram = useMemo(
+    () => (viewStudent ? programs.find((program) => program.id === viewStudent.program) : null),
+    [viewStudent, programs],
+  )
+
+  const viewDepartment = useMemo(
+    () => (viewProgram ? departments.find((department) => department.id === viewProgram.department) : null),
+    [viewProgram, departments],
+  )
+
+  const renderLoadSlip = (copyLabel: string) => (
+    <div className="load-slip">
+      <div className="load-slip-top">
+        <div className="load-slip-title">Enrollment Load Slip</div>
+        <div className="load-slip-campus">City College of Bayawan</div>
+        <div className="load-slip-office">Office of the College Registrar</div>
+      </div>
+
+      <div className="load-slip-section-title">Student General Information</div>
+      <div className="load-slip-grid">
+        <div><span>Student ID Number:</span> {viewStudent?.student_id || '-'}</div>
+        <div><span>Department:</span> {viewDepartment?.name || '-'}</div>
+        <div><span>School Year:</span> {viewStudent?.academic_year || '-'}</div>
+        <div><span>Name:</span> {viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-'}</div>
+        <div><span>Program:</span> {viewProgram?.name || '-'}</div>
+        <div><span>Semester:</span> {viewStudent?.semester || '-'}</div>
+        <div><span>Date of Birth:</span> {formatDateValue(viewDateOfBirth)}</div>
+        <div><span>Year Level:</span> {viewStudent?.year_level || '-'}</div>
+        <div><span>Scholarship:</span> {viewScholarship || '-'}</div>
+        <div><span>Gender:</span> {viewStudent?.gender || '-'}</div>
+        <div><span>Section:</span> {viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</div>
+        <div><span>Status:</span> {viewStatus}</div>
+      </div>
+
+      <div className="table-wrap load-slip-table-wrap">
+        <table className="load-slip-table">
+          <thead>
+            <tr>
+              <th>Code</th>
+              <th>Course Title</th>
+              <th>Section</th>
+              <th>Units</th>
+              <th>Schedule</th>
+              <th>Room</th>
+            </tr>
+          </thead>
+          <tbody>
+            {viewCurrentSemesterLoads.map((load) => {
+              const matchedSubject = subjects.find((subject) => subject.id === load.subject_id || subject.code === load.subject_code)
+              return (
+                <tr key={`${copyLabel}-${load.id}`}>
+                  <td>{load.subject_code}</td>
+                  <td>{load.subject_title}</td>
+                  <td>{viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</td>
+                  <td>{matchedSubject?.units || '-'}</td>
+                  <td>-</td>
+                  <td>-</td>
+                </tr>
+              )
+            })}
+            {!viewCurrentSemesterLoads.length && (
+              <tr>
+                <td colSpan={6}>No current enrolled subjects found for this student.</td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="load-slip-summary">
+        <div><span>Total Subjects:</span> {viewCurrentSemesterLoads.length}</div>
+        <div><span>Total Units:</span> {viewTotalUnits}</div>
+        <div><span>Date Enrolled:</span> {viewStudent?.admission_date || '-'}</div>
+      </div>
+
+      <div className="load-slip-footer">
+        <div className="load-slip-sign-area">
+          <div className="load-slip-sign-line" />
+          <div>Student or Parent/Guardian</div>
+        </div>
+        <div className="load-slip-sign-meta">
+          <div><span>Stamped by:</span> ____________________</div>
+          <div className="load-slip-prepared-label"><span>Prepared by:</span></div>
+          <div className="load-slip-prepared-name">{PREPARED_BY_NAME}</div>
+          <div className="load-slip-prepared-title">{PREPARED_BY_TITLE}</div>
+        </div>
+      </div>
+      <div className="load-slip-copy-tag">{copyLabel}</div>
+    </div>
+  )
 
   return (
     <section className="card">
@@ -532,14 +864,14 @@ export function EnrollmentPage() {
       {success && <p className="success-text">{success}</p>}
 
       <div className="enroll-actions">
-        <button type="button" onClick={() => setIsEnrollModalOpen(true)}>
-          Enroll Student
+        <button type="button" onClick={() => setIsEnrollModalOpen(true)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <AddUserIcon /> Enroll Student
         </button>
       </div>
 
       {isEnrollModalOpen && (
         <div className="enroll-modal-overlay" onClick={closeEnrollModal}>
-          <div className="enroll-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="enroll-modal" style={{ overflowY: 'auto', maxHeight: '90vh' }} onClick={(e) => e.stopPropagation()}>
             <div className="enroll-modal-header">
               <h2>Enrollment Form</h2>
               <button type="button" onClick={closeEnrollModal}>
@@ -603,8 +935,12 @@ export function EnrollmentPage() {
                   <option value="2">2nd Semester</option>
                   <option value="3">Summer</option>
                 </select>
-                <select value={studentForm.section} onChange={(e) => onStudentFieldChange('section', e.target.value)}>
-                  <option value="">Section</option>
+                <select
+                  value={studentForm.section}
+                  onChange={(e) => onStudentFieldChange('section', e.target.value)}
+                  disabled={!hasRequiredSectionFilters || !hasMatchingAcademicTerm || !filteredSections.length}
+                >
+                  <option value="">{sectionPlaceholder}</option>
                   {filteredSections.map((section) => (
                     <option key={section.id} value={section.id}>
                       {section.name} (Year {section.year_level}, Sem {section.semester})
@@ -743,10 +1079,82 @@ export function EnrollmentPage() {
             style={{ paddingLeft: '30px', width: '100%' }}
           />
         </div>
-        <button type="submit">Search</button>
+        <button type="submit" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+          <SearchIcon /> Search
+        </button>
       </form>
 
-      {student && (
+      <h2 className="section-title">Enrolled Students</h2>
+      <div className="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Student ID</th>
+              <th>Name</th>
+              <th>Program</th>
+              <th>Semester</th>
+              <th>Year Level</th>
+              <th>Section</th>
+              <th>Academic Year</th>
+              <th>Gender</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {enrolledStudents.map((student) => (
+              <tr key={student.id}>
+                <td>{student.student_id}</td>
+                <td>{`${student.last_name}, ${student.first_name} ${student.middle_name}.`}</td>
+                <td>{programs.find((p) => p.id === student.program)?.name || '-'}</td>
+                <td>{student.semester}</td>
+                <td>{student.year_level}</td>
+                <td>{sections.find((s) => s.id === student.section)?.name || '-'}</td>
+                <td>{student.academic_year}</td>
+                <td>{student.gender}</td>
+                <td>
+                  <button type="button" onClick={() => { void handleViewStudent(student.student_id) }} disabled={isViewLoading}>
+                    View
+                  </button>
+                  <button type="button" onClick={() => { setSearchId(student.student_id); }}>
+                    Edit
+                  </button>
+                  <button type="button" onClick={() => { /* TODO: Implement delete functionality */ }}>
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {isViewModalOpen && (
+        <div className="enroll-modal-overlay" onClick={() => setIsViewModalOpen(false)}>
+          <div className="enroll-modal load-slip-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="enroll-modal-header">
+              <h2>Enrollment Load Slip</h2>
+              <button type="button" onClick={() => setIsViewModalOpen(false)}>
+                Close
+              </button>
+            </div>
+
+            {!viewStudent ? (
+              <div className="enroll-sheet-form">No student selected.</div>
+            ) : (
+              <>
+                {renderLoadSlip("Registrar's copy")}
+                <div className="load-slip-divider" />
+                {renderLoadSlip("Student's copy")}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+
+
+
+      {student && !isViewModalOpen && (
         <>  
           <h2 className="section-title">Student Profile</h2>
           <div className="table-wrap">
@@ -852,7 +1260,7 @@ export function EnrollmentPage() {
             </>
           )}
 
-          <h2 className="section-title">Current Loads</h2>
+          <h2 className="section-title">Current Semester Loads</h2>
           <div className="table-wrap">
             <table>
               <thead>
@@ -864,7 +1272,7 @@ export function EnrollmentPage() {
                 </tr>
               </thead>
               <tbody>
-                {student.loads.map((load) => (
+                {currentSemesterLoads.map((load) => (
                   <tr key={load.id}>
                     <td>{load.term_label}</td>
                     <td>{load.subject_code}</td>
@@ -872,6 +1280,11 @@ export function EnrollmentPage() {
                     <td>{load.status}</td>
                   </tr>
                 ))}
+                {!currentSemesterLoads.length && (
+                  <tr>
+                    <td colSpan={4}>No enrolled subjects found for the current semester.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

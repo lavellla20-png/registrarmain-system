@@ -1,7 +1,8 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+﻿﻿import { ComponentType, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 
 import { api, getErrorMessage } from '../api'
+import { AdminIcon, ContinuingIcon, DashboardIcon, EnrollmentIcon, ProspectusIcon, TranscriptIcon } from '../components/Icons'
 
 type RecentMenu = {
   path: string
@@ -15,6 +16,15 @@ type AuditLog = {
   entity_id: string
   actor_username: string | null
   created_at: string
+}
+
+const iconMap: Record<string, ComponentType> = {
+  Dashboard: DashboardIcon,
+  Admin: AdminIcon,
+  Prospectus: ProspectusIcon,
+  Enrollment: EnrollmentIcon,
+  Continuing: ContinuingIcon,
+  Transcript: TranscriptIcon,
 }
 
 const RECENT_MENU_KEY = 'ccb_recent_menus'
@@ -60,16 +70,22 @@ export function DashboardPage() {
 
   return (
     <section className="card">
-      <h1>Dashboard</h1>
+      <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <DashboardIcon /> Dashboard
+      </h1>
       <p>Welcome to the City College of Bayawan Local Registrar System.</p>
 
       <h2 className="section-title">Recently Used Menus</h2>
       <div className="dashboard-actions">
-        {quickActions.map((item) => (
-          <Link key={item.path} to={item.path} className="dashboard-action-btn">
-            {item.label}
-          </Link>
-        ))}
+        {quickActions.map((item) => {
+          const Icon = iconMap[item.label]
+          return (
+            <Link key={item.path} to={item.path} className="dashboard-action-btn">
+              {Icon && <Icon />}
+              <span>{item.label}</span>
+            </Link>
+          )
+        })}
       </div>
 
       <h2 className="section-title">Activity Logs</h2>
