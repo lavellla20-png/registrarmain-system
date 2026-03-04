@@ -1,4 +1,4 @@
-import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
 import { ContinuingIcon, SearchIcon } from '../components/Icons'
@@ -744,6 +744,7 @@ export function ContinuingPage() {
         target_academic_year: selectedAcademicYear,
         target_semester: Number(selectedSemester),
         target_section: selectedSection ? Number(selectedSection) : null,
+        admission_date: student.admission_date || continuingFormDate || null,
         subject_load_schedule: buildScheduleText(continuingScheduleGridRef.current),
         adviser_name: resolvedAdviserName,
         adviser_approval_status: selectedAdviserStatus,
@@ -784,6 +785,7 @@ export function ContinuingPage() {
         target_academic_year: selectedAcademicYear,
         target_semester: Number(selectedSemester),
         target_section: selectedSection ? Number(selectedSection) : null,
+        admission_date: student.admission_date || continuingFormDate || null,
         subject_load_schedule: buildScheduleText(continuingScheduleGridRef.current),
         adviser_name: resolvedAdviserName,
         adviser_approval_status: selectedAdviserStatus,
@@ -811,6 +813,7 @@ export function ContinuingPage() {
         adviser_approval_status: 'approved',
         dean_name: resolvedDeanName,
         dean_approval_status: 'approved',
+        admission_date: student.admission_date || continuingFormDate || null,
         subject_load_schedule: scheduleText,
         academic_year: selectedAcademicYear,
         semester: Number(selectedSemester),
@@ -1071,6 +1074,14 @@ export function ContinuingPage() {
     }, 0)
   }, [slipDisplayRows])
   const printedByUser = resolvePrintedByUser()
+  const getLoadSlipValueClassName = (value: string | number | null | undefined) => {
+    const text = String(value ?? '').trim()
+    return text.length > 40 ? 'load-slip-grid-value load-slip-grid-value--compact' : 'load-slip-grid-value'
+  }
+  const getLoadSlipCellClassName = (value: string | number | null | undefined) => {
+    const text = String(value ?? '').trim()
+    return text.length > 40 ? 'load-slip-grid-cell load-slip-grid-cell--wide' : 'load-slip-grid-cell'
+  }
 
   const renderLoadSlip = (copyLabel: string) => (
     <div className="load-slip">
@@ -1098,21 +1109,21 @@ export function ContinuingPage() {
 
       <div className="load-slip-section-title">Student General Information</div>
       <div className="load-slip-grid">
-        <div>
+        <div className={getLoadSlipCellClassName(slipStudent?.student_id)}>
           <span>Student ID Number:</span>{' '}
           <span className="load-slip-student-id-value">{slipStudent?.student_id || '-'}</span>
         </div>
-        <div><span>Department:</span> <span className="load-slip-grid-value">{slipDepartment?.name || '-'}</span></div>
-        <div><span>School Year:</span> <span className="load-slip-grid-value">{slipStudent?.academic_year || '-'}</span></div>
-        <div><span>Name:</span> <span className="load-slip-grid-value">{slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-'}</span></div>
-        <div><span>Program:</span> <span className="load-slip-grid-value">{slipProgram?.name || '-'}</span></div>
-        <div><span>Semester:</span> <span className="load-slip-grid-value">{slipStudent?.semester || '-'}</span></div>
-        <div><span>Date of Birth:</span> <span className="load-slip-grid-value">{formatDateValue(slipDateOfBirth)}</span></div>
-        <div><span>Year Level:</span> <span className="load-slip-grid-value">{slipStudent?.year_level || '-'}</span></div>
-        <div><span>Scholarship:</span> <span className="load-slip-grid-value">{slipScholarship || '-'}</span></div>
-        <div><span>Gender:</span> <span className="load-slip-grid-value">{slipStudent?.gender || '-'}</span></div>
-        <div><span>Section:</span> <span className="load-slip-grid-value">{slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-'}</span></div>
-        <div><span>Status:</span> <span className="load-slip-grid-value">{slipStatus}</span></div>
+        <div className={getLoadSlipCellClassName(slipDepartment?.name)}><span>Department:</span> <span className={getLoadSlipValueClassName(slipDepartment?.name)}>{slipDepartment?.name || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipStudent?.academic_year)}><span>School Year:</span> <span className={getLoadSlipValueClassName(slipStudent?.academic_year)}>{slipStudent?.academic_year || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-')}><span>Name:</span> <span className={getLoadSlipValueClassName(slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-')}>{slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipProgram?.name)}><span>Program:</span> <span className={getLoadSlipValueClassName(slipProgram?.name)}>{slipProgram?.name || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipStudent?.semester)}><span>Semester:</span> <span className={getLoadSlipValueClassName(slipStudent?.semester)}>{slipStudent?.semester || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(formatDateValue(slipDateOfBirth))}><span>Date of Birth:</span> <span className={getLoadSlipValueClassName(formatDateValue(slipDateOfBirth))}>{formatDateValue(slipDateOfBirth)}</span></div>
+        <div className={getLoadSlipCellClassName(slipStudent?.year_level)}><span>Year Level:</span> <span className={getLoadSlipValueClassName(slipStudent?.year_level)}>{slipStudent?.year_level || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipScholarship)}><span>Scholarship:</span> <span className={getLoadSlipValueClassName(slipScholarship)}>{slipScholarship || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipStudent?.gender)}><span>Gender:</span> <span className={getLoadSlipValueClassName(slipStudent?.gender)}>{slipStudent?.gender || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-')}><span>Section:</span> <span className={getLoadSlipValueClassName(slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-')}>{slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-'}</span></div>
+        <div className={getLoadSlipCellClassName(slipStatus)}><span>Status:</span> <span className={getLoadSlipValueClassName(slipStatus)}>{slipStatus}</span></div>
       </div>
 
       <div className="table-wrap load-slip-table-wrap">

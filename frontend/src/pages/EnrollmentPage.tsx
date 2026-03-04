@@ -1134,6 +1134,14 @@ export function EnrollmentPage() {
     [viewProgram, departments],
   )
   const printedByUser = resolvePrintedByUser()
+  const getLoadSlipValueClassName = (value: string | number | null | undefined) => {
+    const text = String(value ?? '').trim()
+    return text.length > 40 ? 'load-slip-grid-value load-slip-grid-value--compact' : 'load-slip-grid-value'
+  }
+  const getLoadSlipCellClassName = (value: string | number | null | undefined) => {
+    const text = String(value ?? '').trim()
+    return text.length > 40 ? 'load-slip-grid-cell load-slip-grid-cell--wide' : 'load-slip-grid-cell'
+  }
 
   const renderLoadSlip = (copyLabel: string) => (
     <div className="load-slip">
@@ -1161,21 +1169,21 @@ export function EnrollmentPage() {
 
       <div className="load-slip-section-title">Student General Information</div>
       <div className="load-slip-grid">
-        <div>
+        <div className={getLoadSlipCellClassName(viewStudent?.student_id)}>
           <span>Student ID Number:</span>{' '}
           <span className="load-slip-student-id-value">{viewStudent?.student_id || '-'}</span>
         </div>
-        <div><span>Department:</span> <span className="load-slip-grid-value">{viewDepartment?.name || '-'}</span></div>
-        <div><span>School Year:</span> <span className="load-slip-grid-value">{viewStudent?.academic_year || '-'}</span></div>
-        <div><span>Name:</span> <span className="load-slip-grid-value">{viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-'}</span></div>
-        <div><span>Program:</span> <span className="load-slip-grid-value">{viewProgram?.name || '-'}</span></div>
-        <div><span>Semester:</span> <span className="load-slip-grid-value">{viewStudent?.semester || '-'}</span></div>
-        <div><span>Date of Birth:</span> <span className="load-slip-grid-value">{formatDateValue(viewDateOfBirth)}</span></div>
-        <div><span>Year Level:</span> <span className="load-slip-grid-value">{viewStudent?.year_level || '-'}</span></div>
-        <div><span>Scholarship:</span> <span className="load-slip-grid-value">{viewScholarship || '-'}</span></div>
-        <div><span>Gender:</span> <span className="load-slip-grid-value">{viewStudent?.gender || '-'}</span></div>
-        <div><span>Section:</span> <span className="load-slip-grid-value">{viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</span></div>
-        <div><span>Status:</span> <span className="load-slip-grid-value">{viewStatus}</span></div>
+        <div className={getLoadSlipCellClassName(viewDepartment?.name)}><span>Department:</span> <span className={getLoadSlipValueClassName(viewDepartment?.name)}>{viewDepartment?.name || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewStudent?.academic_year)}><span>School Year:</span> <span className={getLoadSlipValueClassName(viewStudent?.academic_year)}>{viewStudent?.academic_year || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-')}><span>Name:</span> <span className={getLoadSlipValueClassName(viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-')}>{viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewProgram?.name)}><span>Program:</span> <span className={getLoadSlipValueClassName(viewProgram?.name)}>{viewProgram?.name || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewStudent?.semester)}><span>Semester:</span> <span className={getLoadSlipValueClassName(viewStudent?.semester)}>{viewStudent?.semester || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(formatDateValue(viewDateOfBirth))}><span>Date of Birth:</span> <span className={getLoadSlipValueClassName(formatDateValue(viewDateOfBirth))}>{formatDateValue(viewDateOfBirth)}</span></div>
+        <div className={getLoadSlipCellClassName(viewStudent?.year_level)}><span>Year Level:</span> <span className={getLoadSlipValueClassName(viewStudent?.year_level)}>{viewStudent?.year_level || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewScholarship)}><span>Scholarship:</span> <span className={getLoadSlipValueClassName(viewScholarship)}>{viewScholarship || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewStudent?.gender)}><span>Gender:</span> <span className={getLoadSlipValueClassName(viewStudent?.gender)}>{viewStudent?.gender || '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-')}><span>Section:</span> <span className={getLoadSlipValueClassName(viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-')}>{viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</span></div>
+        <div className={getLoadSlipCellClassName(viewStatus)}><span>Status:</span> <span className={getLoadSlipValueClassName(viewStatus)}>{viewStatus}</span></div>
       </div>
 
       <div className="table-wrap load-slip-table-wrap">

@@ -223,6 +223,7 @@ class ContinuingViewSet(BaseRegistrarViewSet):
         target_semester = request.data.get('target_semester')
         target_program = request.data.get('target_program')
         target_section = request.data.get('target_section', None)
+        admission_date_raw = (request.data.get('admission_date') or '').strip()
         # Frontend sends the dragged schedule with day/time format, e.g.:
         # "MWF 7:00-8:00: ... | TTH 7:00-8:30: ..."
         # Persist this verbatim (trimmed) to both Student and AcademicHistory.
@@ -250,6 +251,13 @@ class ContinuingViewSet(BaseRegistrarViewSet):
 
             if not term.is_active:
                 return Response({'detail': 'Promotion is only allowed for the active term.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        parsed_admission_date = None
+        if admission_date_raw:
+            try:
+                parsed_admission_date = date.fromisoformat(admission_date_raw)
+            except ValueError:
+                return Response({'detail': 'Invalid admission_date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
 
         students = Student.objects.select_related('program', 'section').filter(student_id__in=student_ids, is_active=True)
         if not students.exists():
@@ -313,6 +321,8 @@ class ContinuingViewSet(BaseRegistrarViewSet):
                 student.academic_year = target_academic_year
                 student.semester = int(target_semester)
                 student.section_id = int(target_section) if target_section not in [None, ''] else None
+                if parsed_admission_date and not student.admission_date:
+                    student.admission_date = parsed_admission_date
                 student.subject_load_schedule = subject_load_schedule
                 student.adviser_name = adviser_name
                 student.adviser_approval_status = 'pending'

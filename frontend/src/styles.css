@@ -912,7 +912,7 @@ td {
 
 .load-slip-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.9fr) minmax(0, 1fr);
   border: 1px solid #111827;
   border-top: 0;
 }
@@ -924,8 +924,12 @@ td {
   min-height: 34px;
 }
 
-.load-slip-grid > div:nth-child(3n) {
-  border-right: 0;
+.load-slip-grid-cell {
+  grid-column: auto;
+}
+
+.load-slip-grid-cell--wide {
+  grid-column: auto;
 }
 
 .load-slip-grid span,
@@ -935,6 +939,11 @@ td {
 
 .load-slip-grid-value {
   font-weight: 700;
+}
+
+.load-slip-grid-value--compact {
+  font-size: 11px;
+  line-height: 1.15;
 }
 
 .load-slip-table-value {
@@ -977,6 +986,7 @@ td {
 .load-slip-summary > div {
   border-right: 1px solid #d1d5db;
   padding: 8px;
+  font-weight: 700;
 }
 
 .load-slip-summary > div:last-child {
@@ -1171,8 +1181,8 @@ td {
   }
 
   .load-slip-top-logos-right img {
-    width: 70px;
-    height: 70px;
+    width: 65px;
+    height: 65px;
   }
 
   .load-slip-title {
@@ -1228,8 +1238,16 @@ td {
 
   .load-slip-grid {
     display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.9fr) minmax(0, 1fr) !important;
     border-top: 0;
+  }
+
+  .load-slip-grid-cell {
+    grid-column: auto !important;
+  }
+
+  .load-slip-grid-cell--wide {
+    grid-column: auto !important;
   }
 
   .load-slip-grid > div {
@@ -1245,18 +1263,23 @@ td {
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
-  .load-slip-grid > div,
-  .load-slip-summary > div {
-    border-right: 1px solid #000 !important;
+  .load-slip-grid > div {
+    border-right: 0 !important;
+    border-bottom: 0 !important;
   }
 
-  .load-slip-grid > div:nth-child(3n) {
-    border-right: 0 !important;
+  .load-slip-summary > div {
+    border-right: 1px solid #000 !important;
   }
 
   .load-slip-grid span {
     font-weight: 700;
     font-size: 10.5px;
+  }
+
+  .load-slip-grid-value--compact {
+    font-size: 9.4px;
+    line-height: 1.1;
   }
 
   .load-slip-table th {
