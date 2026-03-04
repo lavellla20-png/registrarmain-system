@@ -179,6 +179,34 @@ const formatUnitsForDisplay = (value: string): string => {
   return Number.isInteger(numericValue) ? String(numericValue) : String(numericValue)
 }
 
+const resolvePrintedByUser = (): string => {
+  const storedUsername = localStorage.getItem('auth_username')
+  if (storedUsername && storedUsername.trim()) return storedUsername.trim()
+
+  const accessToken = localStorage.getItem('access_token')
+  if (!accessToken) return 'Unknown User'
+  const parts = accessToken.split('.')
+  if (parts.length < 2) return 'Unknown User'
+
+  try {
+    const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const paddedBase64 = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=')
+    const payload = JSON.parse(window.atob(paddedBase64)) as Record<string, unknown>
+    const usernameCandidate =
+      payload.username ?? payload.user_name ?? payload.preferred_username ?? payload.email ?? payload.sub
+
+    if (typeof usernameCandidate === 'string' && usernameCandidate.trim()) {
+      const normalized = usernameCandidate.trim()
+      localStorage.setItem('auth_username', normalized)
+      return normalized
+    }
+  } catch {
+    // Ignore decode errors and fall back to unknown.
+  }
+
+  return 'Unknown User'
+}
+
 const buildAcademicYearOptions = () => {
   const currentYear = new Date().getFullYear()
   return Array.from({ length: 21 }, (_, i) => {
@@ -941,17 +969,30 @@ export function ContinuingPage() {
       return total + (Number.isFinite(units) ? units : 0)
     }, 0)
   }, [slipDisplayRows])
+  const printedByUser = resolvePrintedByUser()
 
   const renderLoadSlip = (copyLabel: string) => (
     <div className="load-slip">
+      <img className="load-slip-watermark" src="/Picture2.png" alt="" aria-hidden="true" />
       <div className="load-slip-header">
-        <div className="load-slip-top-logos" aria-hidden="true">
-          <img src="/Picture2.png" alt="" />
-          <img src="/Picture3.png" alt="" />
-          <img src="/ccb_registrar_logo.png" alt="" />
+        <div className="load-slip-header-row">
+          <div className="load-slip-header-tag">ENROLLMENT LOAD SLIP</div>
+          <div className="load-slip-header-main">
+            <div className="load-slip-top-logos load-slip-top-logos-left" aria-hidden="true">
+              <img src="/Picture2.png" alt="" />
+            </div>
+            <div className="load-slip-header-center">
+              <div className="load-slip-campus">CITY COLLEGE OF BAYAWAN</div>
+              <div className="load-slip-contact-line">Government Center, Cabcabon, Banga, Bayawan City</div>
+              <div className="load-slip-contact-line">Negros Oriental (035) 430-0263 local 1120</div>
+              <div className="load-slip-contact-line load-slip-email">citycollegeofbayawan@gmail.com</div>
+              <div className="load-slip-office">OFFICE OF THE COLLEGE REGISTRAR</div>
+            </div>
+            <div className="load-slip-top-logos load-slip-top-logos-right" aria-hidden="true">
+              <img src="/ccb_registrar_logo.png" alt="" />
+            </div>
+          </div>
         </div>
-        <div className="load-slip-campus">CITY COLLEGE OF BAYAWAN</div>
-        <div className="load-slip-office">OFFICE OF THE COLLEGE REGISTRAR</div>
       </div>
 
       <div className="load-slip-section-title">Student General Information</div>
@@ -960,17 +1001,17 @@ export function ContinuingPage() {
           <span>Student ID Number:</span>{' '}
           <span className="load-slip-student-id-value">{slipStudent?.student_id || '-'}</span>
         </div>
-        <div><span>Department:</span> {slipDepartment?.name || '-'}</div>
-        <div><span>School Year:</span> {slipStudent?.academic_year || '-'}</div>
-        <div><span>Name:</span> {slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-'}</div>
-        <div><span>Program:</span> {slipProgram?.name || '-'}</div>
-        <div><span>Semester:</span> {slipStudent?.semester || '-'}</div>
-        <div><span>Date of Birth:</span> {formatDateValue(slipDateOfBirth)}</div>
-        <div><span>Year Level:</span> {slipStudent?.year_level || '-'}</div>
-        <div><span>Scholarship:</span> {slipScholarship || '-'}</div>
-        <div><span>Gender:</span> {slipStudent?.gender || '-'}</div>
-        <div><span>Section:</span> {slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-'}</div>
-        <div><span>Status:</span> {slipStatus}</div>
+        <div><span>Department:</span> <span className="load-slip-grid-value">{slipDepartment?.name || '-'}</span></div>
+        <div><span>School Year:</span> <span className="load-slip-grid-value">{slipStudent?.academic_year || '-'}</span></div>
+        <div><span>Name:</span> <span className="load-slip-grid-value">{slipStudent ? `${slipStudent.last_name}, ${slipStudent.first_name} ${slipStudent.middle_name || ''}` : '-'}</span></div>
+        <div><span>Program:</span> <span className="load-slip-grid-value">{slipProgram?.name || '-'}</span></div>
+        <div><span>Semester:</span> <span className="load-slip-grid-value">{slipStudent?.semester || '-'}</span></div>
+        <div><span>Date of Birth:</span> <span className="load-slip-grid-value">{formatDateValue(slipDateOfBirth)}</span></div>
+        <div><span>Year Level:</span> <span className="load-slip-grid-value">{slipStudent?.year_level || '-'}</span></div>
+        <div><span>Scholarship:</span> <span className="load-slip-grid-value">{slipScholarship || '-'}</span></div>
+        <div><span>Gender:</span> <span className="load-slip-grid-value">{slipStudent?.gender || '-'}</span></div>
+        <div><span>Section:</span> <span className="load-slip-grid-value">{slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-'}</span></div>
+        <div><span>Status:</span> <span className="load-slip-grid-value">{slipStatus}</span></div>
       </div>
 
       <div className="table-wrap load-slip-table-wrap">
@@ -989,12 +1030,12 @@ export function ContinuingPage() {
             {slipDisplayRows.map((row, index) => {
               return (
                 <tr key={`${copyLabel}-${row.code}-${index}`}>
-                  <td>{row.code}</td>
-                  <td>{row.title}</td>
-                  <td>{slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-'}</td>
-                  <td>{row.units}</td>
-                  <td>{row.schedule}</td>
-                  <td>-</td>
+                  <td><span className="load-slip-table-value">{row.code}</span></td>
+                  <td><span className="load-slip-table-value">{row.title}</span></td>
+                  <td><span className="load-slip-table-value">{slipStudent ? (sections.find((s) => s.id === slipStudent.section)?.name || '-') : '-'}</span></td>
+                  <td><span className="load-slip-table-value">{row.units}</span></td>
+                  <td><span className="load-slip-table-value">{row.schedule}</span></td>
+                  <td><span className="load-slip-table-value">-</span></td>
                 </tr>
               )
             })}
@@ -1025,7 +1066,10 @@ export function ContinuingPage() {
           <div className="load-slip-prepared-title">{PREPARED_BY_TITLE}</div>
         </div>
       </div>
-      <div className="load-slip-copy-tag">{copyLabel}</div>
+      <div className="load-slip-copy-footer">
+        <div className="load-slip-copy-tag">{copyLabel}</div>
+        <div className="load-slip-copy-printed-by"><span>Printed by:</span> {printedByUser}</div>
+      </div>
     </div>
   )
 

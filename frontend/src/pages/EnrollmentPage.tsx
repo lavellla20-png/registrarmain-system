@@ -1137,14 +1137,26 @@ export function EnrollmentPage() {
 
   const renderLoadSlip = (copyLabel: string) => (
     <div className="load-slip">
+      <img className="load-slip-watermark" src="/Picture2.png" alt="" aria-hidden="true" />
       <div className="load-slip-header">
-        <div className="load-slip-top-logos" aria-hidden="true">
-          <img src="/Picture2.png" alt="" />
-          <img src="/Picture3.png" alt="" />
-          <img src="/ccb_registrar_logo.png" alt="" />
+        <div className="load-slip-header-row">
+          <div className="load-slip-header-tag">ENROLLMENT LOAD SLIP</div>
+          <div className="load-slip-header-main">
+            <div className="load-slip-top-logos load-slip-top-logos-left" aria-hidden="true">
+              <img src="/Picture2.png" alt="" />
+            </div>
+            <div className="load-slip-header-center">
+              <div className="load-slip-campus">CITY COLLEGE OF BAYAWAN</div>
+              <div className="load-slip-contact-line">Government Center, Cabcabon, Banga, Bayawan City</div>
+              <div className="load-slip-contact-line">Negros Oriental (035) 430-0263 local 1120</div>
+              <div className="load-slip-contact-line load-slip-email">citycollegeofbayawan@gmail.com</div>
+              <div className="load-slip-office">OFFICE OF THE COLLEGE REGISTRAR</div>
+            </div>
+            <div className="load-slip-top-logos load-slip-top-logos-right" aria-hidden="true">
+              <img src="/ccb_registrar_logo.png" alt="" />
+            </div>
+          </div>
         </div>
-        <div className="load-slip-campus">CITY COLLEGE OF BAYAWAN</div>
-        <div className="load-slip-office">OFFICE OF THE COLLEGE REGISTRAR</div>
       </div>
 
       <div className="load-slip-section-title">Student General Information</div>
@@ -1153,17 +1165,17 @@ export function EnrollmentPage() {
           <span>Student ID Number:</span>{' '}
           <span className="load-slip-student-id-value">{viewStudent?.student_id || '-'}</span>
         </div>
-        <div><span>Department:</span> {viewDepartment?.name || '-'}</div>
-        <div><span>School Year:</span> {viewStudent?.academic_year || '-'}</div>
-        <div><span>Name:</span> {viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-'}</div>
-        <div><span>Program:</span> {viewProgram?.name || '-'}</div>
-        <div><span>Semester:</span> {viewStudent?.semester || '-'}</div>
-        <div><span>Date of Birth:</span> {formatDateValue(viewDateOfBirth)}</div>
-        <div><span>Year Level:</span> {viewStudent?.year_level || '-'}</div>
-        <div><span>Scholarship:</span> {viewScholarship || '-'}</div>
-        <div><span>Gender:</span> {viewStudent?.gender || '-'}</div>
-        <div><span>Section:</span> {viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</div>
-        <div><span>Status:</span> {viewStatus}</div>
+        <div><span>Department:</span> <span className="load-slip-grid-value">{viewDepartment?.name || '-'}</span></div>
+        <div><span>School Year:</span> <span className="load-slip-grid-value">{viewStudent?.academic_year || '-'}</span></div>
+        <div><span>Name:</span> <span className="load-slip-grid-value">{viewStudent ? `${viewStudent.last_name}, ${viewStudent.first_name} ${viewStudent.middle_name || ''}` : '-'}</span></div>
+        <div><span>Program:</span> <span className="load-slip-grid-value">{viewProgram?.name || '-'}</span></div>
+        <div><span>Semester:</span> <span className="load-slip-grid-value">{viewStudent?.semester || '-'}</span></div>
+        <div><span>Date of Birth:</span> <span className="load-slip-grid-value">{formatDateValue(viewDateOfBirth)}</span></div>
+        <div><span>Year Level:</span> <span className="load-slip-grid-value">{viewStudent?.year_level || '-'}</span></div>
+        <div><span>Scholarship:</span> <span className="load-slip-grid-value">{viewScholarship || '-'}</span></div>
+        <div><span>Gender:</span> <span className="load-slip-grid-value">{viewStudent?.gender || '-'}</span></div>
+        <div><span>Section:</span> <span className="load-slip-grid-value">{viewStudent ? (sections.find((s) => s.id === viewStudent.section)?.name || '-') : '-'}</span></div>
+        <div><span>Status:</span> <span className="load-slip-grid-value">{viewStatus}</span></div>
       </div>
 
       <div className="table-wrap load-slip-table-wrap">
@@ -1182,12 +1194,12 @@ export function EnrollmentPage() {
             {viewSlipRows.map((row, index) => {
               return (
                 <tr key={`${copyLabel}-${row.code}-${index}`}>
-                  <td>{row.code}</td>
-                  <td>{row.courseTitle}</td>
-                  <td>{row.section}</td>
-                  <td>{formatUnitsForView(row.units)}</td>
-                  <td>{row.schedule}</td>
-                  <td>{row.room}</td>
+                  <td><span className="load-slip-table-value">{row.code}</span></td>
+                  <td><span className="load-slip-table-value">{row.courseTitle}</span></td>
+                  <td><span className="load-slip-table-value">{row.section}</span></td>
+                  <td><span className="load-slip-table-value">{formatUnitsForView(row.units)}</span></td>
+                  <td><span className="load-slip-table-value">{row.schedule}</span></td>
+                  <td><span className="load-slip-table-value">{row.room}</span></td>
                 </tr>
               )
             })}
