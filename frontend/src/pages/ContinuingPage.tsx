@@ -1,4 +1,4 @@
-﻿import { DragEvent, FormEvent, useEffect, useMemo, useState } from 'react'
+import { DragEvent, FormEvent, useEffect, useMemo, useRef, useState } from 'react'
 
 import { api, getErrorMessage } from '../api'
 import { ContinuingIcon, SearchIcon } from '../components/Icons'
@@ -243,6 +243,7 @@ export function ContinuingPage() {
   const [selectedDeanStatus, setSelectedDeanStatus] = useState('approved')
   const [continuingFormDate, setContinuingFormDate] = useState(new Date().toISOString().split('T')[0])
   const [continuingScheduleGrid, setContinuingScheduleGrid] = useState<ContinuingScheduleGridRow[]>([])
+  const continuingScheduleGridRef = useRef<ContinuingScheduleGridRow[]>([])
   const [draggingCell, setDraggingCell] = useState<ScheduleDragCell | null>(null)
   const [dropTarget, setDropTarget] = useState<ScheduleDragCell | null>(null)
 
@@ -423,13 +424,13 @@ export function ContinuingPage() {
 
   const scheduleRows = scheduleFromCurrentLoads.length ? scheduleFromCurrentLoads : scheduleFromProspectus
 
-  const buildScheduleText = () => {
-    const saturdayHeaderIndex = continuingScheduleGrid.findIndex((row) => row.tthSaturdayHeader)
+  const buildScheduleText = (grid: ContinuingScheduleGridRow[] = continuingScheduleGrid) => {
+    const saturdayHeaderIndex = grid.findIndex((row) => row.tthSaturdayHeader)
     const hasSaturdaySubjects =
       saturdayHeaderIndex >= 0 &&
-      continuingScheduleGrid.slice(saturdayHeaderIndex + 1).some((row) => hasSpecificSubject(row.tthSubject))
+      grid.slice(saturdayHeaderIndex + 1).some((row) => hasSpecificSubject(row.tthSubject))
 
-    return continuingScheduleGrid
+    return grid
       .flatMap((row) => {
         const mwfHasSubject = hasSpecificSubject(row.mwfSubject)
         const tthHasSubject = hasSpecificSubject(row.tthSubject)
@@ -488,6 +489,102 @@ export function ContinuingPage() {
       }
     })
 
+    const shouldUseSavedSchedule =
+      Boolean(student?.subject_load_schedule?.trim()) &&
+      selectedAcademicYear === (student?.academic_year || '') &&
+      Number(selectedSemester || 0) === Number(student?.semester || 0) &&
+      Number(selectedProgram || 0) === Number(student?.program || 0) &&
+      Number(selectedYearLevel || 0) === Number(student?.year_level || 0) &&
+      (selectedSection ? Number(selectedSection) : null) === (student?.section ?? null)
+
+    if (shouldUseSavedSchedule && student?.subject_load_schedule) {
+      const parseScheduleSide = (rawSide: string) => {
+        const unitsMatch = rawSide.match(/\(([^()]*)\)\s*$/)
+        const units = unitsMatch ? unitsMatch[1].trim() : ''
+        const withoutUnits =
+          unitsMatch && unitsMatch.index !== undefined
+            ? rawSide.slice(0, unitsMatch.index).trim()
+            : rawSide.trim()
+        const separatorIndex = withoutUnits.indexOf(': ')
+        if (separatorIndex < 0) return { time: '', subject: withoutUnits.trim(), units }
+        return {
+          time: withoutUnits.slice(0, separatorIndex).trim(),
+          subject: withoutUnits.slice(separatorIndex + 2).trim(),
+          units,
+        }
+      }
+
+      const resolveSubjectMeta = (rawSubject: string) => {
+        const subjectText = rawSubject.trim().replace(/\s*-\s*[A-Za-z0-9]+$/, '').trim()
+        if (!subjectText) {
+          return { code: undefined as string | undefined, title: undefined as string | undefined, units: '' }
+        }
+        const matched = subjects
+          .filter((subject) => subjectText.startsWith(`${subject.code} `) || subjectText === subject.code)
+          .sort((a, b) => b.code.length - a.code.length)[0]
+        if (!matched) {
+          return { code: undefined as string | undefined, title: undefined as string | undefined, units: '' }
+        }
+        return {
+          code: matched.code,
+          title: matched.title,
+          units: formatUnitsForDisplay(String(matched.units)),
+        }
+      }
+
+      let inSaturdayBlock = false
+      const sectionSuffix = selectedSectionData?.name ? ` - ${selectedSectionData.name}` : ''
+
+      student.subject_load_schedule
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .forEach((line) => {
+          const normalizedLine = line.replace(/\s+/g, ' ').trim()
+          const mwfPrefixMatch = normalizedLine.match(/^MWF\s+/i)
+          if (!mwfPrefixMatch) return
+
+          const splitMatch = normalizedLine.match(/\s\|\sTTH\s/i)
+          const mwfRaw =
+            splitMatch && splitMatch.index !== undefined
+              ? normalizedLine.slice(mwfPrefixMatch[0].length, splitMatch.index).trim()
+              : normalizedLine.replace(/^MWF\s+/i, '')
+          const mwfSide = parseScheduleSide(mwfRaw)
+
+          if (hasSpecificSubject(mwfSide.subject)) {
+            const mwfRowIndex = grid.findIndex((row) => row.mwfTime === mwfSide.time)
+            if (mwfRowIndex >= 0) {
+              const meta = resolveSubjectMeta(mwfSide.subject)
+              grid[mwfRowIndex].mwfSubject = `${meta.code || mwfSide.subject}${meta.title ? ` ${meta.title}` : ''}${sectionSuffix}`.trim()
+              grid[mwfRowIndex].mwfUnits = mwfSide.units || meta.units
+              grid[mwfRowIndex].mwfCode = meta.code
+              grid[mwfRowIndex].mwfTitle = meta.title
+            }
+          }
+
+          if (!splitMatch || splitMatch.index === undefined) return
+
+          const tthRaw = normalizedLine.slice(splitMatch.index + splitMatch[0].length).trim()
+          const tthSide = parseScheduleSide(tthRaw)
+          if (tthSide.time.toUpperCase() === 'TIME' && tthSide.subject.toUpperCase() === 'SATURDAY') {
+            inSaturdayBlock = true
+            return
+          }
+          if (!hasSpecificSubject(tthSide.subject)) return
+
+          const tthRowIndex = grid.findIndex((row) => !row.tthSaturdayHeader && row.tthTime === tthSide.time)
+          if (tthRowIndex < 0) return
+
+          const meta = resolveSubjectMeta(tthSide.subject)
+          grid[tthRowIndex].tthSubject = `${meta.code || tthSide.subject}${meta.title ? ` ${meta.title}` : ''}${sectionSuffix}`.trim()
+          grid[tthRowIndex].tthUnits = tthSide.units || meta.units
+          grid[tthRowIndex].tthCode = meta.code
+          grid[tthRowIndex].tthTitle = meta.title
+        })
+
+      return grid
+    }
+
     const targetCells: Array<{ rowIndex: number; column: 'mwf' | 'tth' }> = []
     grid.forEach((row, rowIndex) => {
       targetCells.push({ rowIndex, column: 'mwf' })
@@ -515,13 +612,17 @@ export function ContinuingPage() {
     })
 
     return grid
-  }, [scheduleRows, selectedSectionData, subjects])
+  }, [scheduleRows, selectedSectionData, selectedAcademicYear, selectedProgram, selectedSection, selectedSemester, selectedYearLevel, student, subjects])
 
   useEffect(() => {
     setContinuingScheduleGrid(computedContinuingScheduleGrid)
     setDraggingCell(null)
     setDropTarget(null)
   }, [computedContinuingScheduleGrid])
+
+  useEffect(() => {
+    continuingScheduleGridRef.current = continuingScheduleGrid
+  }, [continuingScheduleGrid])
 
   const getScheduleCellKeys = (column: ScheduleColumn) =>
     column === 'mwf'
@@ -643,7 +744,7 @@ export function ContinuingPage() {
         target_academic_year: selectedAcademicYear,
         target_semester: Number(selectedSemester),
         target_section: selectedSection ? Number(selectedSection) : null,
-        subject_load_schedule: buildScheduleText(),
+        subject_load_schedule: buildScheduleText(continuingScheduleGridRef.current),
         adviser_name: resolvedAdviserName,
         adviser_approval_status: selectedAdviserStatus,
         dean_name: resolvedDeanName,
@@ -683,7 +784,7 @@ export function ContinuingPage() {
         target_academic_year: selectedAcademicYear,
         target_semester: Number(selectedSemester),
         target_section: selectedSection ? Number(selectedSection) : null,
-        subject_load_schedule: buildScheduleText(),
+        subject_load_schedule: buildScheduleText(continuingScheduleGridRef.current),
         adviser_name: resolvedAdviserName,
         adviser_approval_status: selectedAdviserStatus,
         dean_name: resolvedDeanName,
@@ -704,7 +805,7 @@ export function ContinuingPage() {
     setError('')
     setSuccess('')
     try {
-      const scheduleText = buildScheduleText()
+      const scheduleText = buildScheduleText(continuingScheduleGridRef.current)
       await api.patch(`/students/${student.student_id}/`, {
         adviser_name: resolvedAdviserName,
         adviser_approval_status: 'approved',
@@ -1434,4 +1535,3 @@ export function ContinuingPage() {
     </section>
   )
 }
-
